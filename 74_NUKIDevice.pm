@@ -32,7 +32,7 @@ use strict;
 use warnings;
 use JSON;
 
-my $version = "0.1.27";
+my $version = "0.1.28";
 
 
 
@@ -110,7 +110,7 @@ sub NUKIDevice_Define($$) {
     $modules{NUKIDevice}{defptr}{$code} = $hash;
   
   
-    Log3 $name, 3, "NUKIDevice ($name) - defined with NukiID $code";
+    Log3 $name, 3, "NUKIDevice ($name) - defined with Code: $code";
 
     $attr{$name}{room} = "NUKI" if( !defined( $attr{$name}{room} ) );
 
@@ -129,7 +129,7 @@ sub NUKIDevice_Undef($$) {
 
     my $code = $hash->{NUKIID};
     $code = $hash->{IODev}->{NAME} ."-". $code if( defined($hash->{IODev}->{NAME}) );
-
+    Log3 $name, 3, "NUKIDevice ($name) - undefined with Code: $code";
     delete($modules{HUEDevice}{defptr}{$code});
 
     return undef;

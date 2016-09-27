@@ -305,10 +305,11 @@ sub NUKIBridge_dispatch($$$) {
 	Log3 $name, 3, "NUKIBridge ($name) - action is undefined" if( $param->{code} eq 400 );
 	
 	
-	if ( $param->{code} eq 400 ) {
-            $json = '{"state": 1, "stateName": "locked", "batteryCritical": false, "success": "true"}';
-            NUKIDevice_Parse($param->{chash},$json);
-        }
+	######### Zum testen da ich kein Nuki Smartkey habe ############
+	#if ( $param->{code} eq 400 ) {
+        #    $json = '{"state": 1, "stateName": "locked", "batteryCritical": false, "success": "true"}';
+        #    NUKIDevice_Parse($param->{chash},$json);
+        #}
 
         
 	return;
@@ -316,11 +317,13 @@ sub NUKIBridge_dispatch($$$) {
     
     
     if( $hash == $param->{chash} ) {
-        $json = '[{"nukiId": 1, "name": "Home"}, {"nukiId": 2, "name": "Grandma"}]';
+    
+        #$json = '[{"nukiId": 1, "name": "Home"}, {"nukiId": 2, "name": "Grandma"}]';        # zum testen da ich kein Nuki Smartkey habe
+        
         NUKIBridge_ResponseProcessing($hash,$json);
         
     } else {
-        $json = '{"state": 1, "stateName": "locked", "batteryCritical": false, "success": "true"}';
+    
         NUKIDevice_Parse($param->{chash},$json);
     }
 }

@@ -2,7 +2,7 @@
 # 
 # Developed with Kate
 #
-#  (c) 2015-2016 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
+#  (c) 2016 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
 #  All rights reserved
 #
 #  This script is free software; you can redistribute it and/or modify
@@ -31,8 +31,9 @@ package main;
 use strict;
 use warnings;
 use JSON;
+use Time::HiRes qw(gettimeofday);
 
-my $version = "0.1.28";
+my $version = "0.1.37";
 
 
 
@@ -83,7 +84,8 @@ sub NUKIDevice_Define($$) {
 
     $hash->{NUKIID} 	= $nukiId;
     $hash->{VERSION} 	= $version;
-    $hash->{STATE} = 'Initialized';
+    $hash->{STATE}      = 'Initialized';
+    $hash->{INTERVAL}   = 30;
     
     
     AssignIoPort($hash,$iodev) if( !$hash->{IODev} );
@@ -113,6 +115,15 @@ sub NUKIDevice_Define($$) {
     Log3 $name, 3, "NUKIDevice ($name) - defined with Code: $code";
 
     $attr{$name}{room} = "NUKI" if( !defined( $attr{$name}{room} ) );
+    
+    
+    RemoveInternalTimer($hash);
+    
+    if( $init_done ) {
+        NUKIDevice_GetUpdateInternalTimer($hash);
+    } else {
+        InternalTimer(gettimeofday()+20, "NUKIDevice_GetUpdateInternalTimer", $hash, 0);
+    }
 
     return undef;
 }
@@ -143,30 +154,40 @@ sub NUKIDevice_Attr(@) {
     if( $attrName eq "disable" ) {
 	if( $cmd eq "set" ) {
 	    if( $attrVal eq "0" ) {
-		#RemoveInternalTimer( $hash );
-		#InternalTimer( gettimeofday()+2, "NUKIDevice_Get_stateRequest", $hash, 0 ) if( ReadingsVal( $hash->{NAME}, "state", 0 ) eq "disabled" );
-		#readingsSingleUpdate ( $hash, "state", "active", 1 );
+		RemoveInternalTimer( $hash );
+		InternalTimer( gettimeofday()+2, "NUKIDevice_GetUpdate", $hash, 0 ) if( ReadingsVal( $hash->{NAME}, "state", 0 ) eq "disabled" );
+		readingsSingleUpdate ( $hash, "state", "initialized", 1 );
 		Log3 $name, 3, "NUKIDevice ($name) - enabled";
 	    } else {
-		#readingsSingleUpdate ( $hash, "state", "disabled", 1 );
-		#RemoveInternalTimer( $hash );
+		readingsSingleUpdate ( $hash, "state", "disabled", 1 );
+		RemoveInternalTimer( $hash );
 		Log3 $name, 3, "NUKIDevice ($name) - disabled";
 	    }
-	}
-	elsif( $cmd eq "del" ) {
-	    #RemoveInternalTimer( $hash );
-	    #InternalTimer( gettimeofday()+2, "NUKIDevice_Get_stateRequest", $hash, 0 ) if( ReadingsVal( $hash->{NAME}, "state", 0 ) eq "disabled" );
-	    #readingsSingleUpdate ( $hash, "state", "active", 1 );
-	    Log3 $name, 3, "NUKIDevice ($name) - enabled";
-
+	    
 	} else {
-	    if($cmd eq "set") {
-		$attr{$name}{$attrName} = $attrVal;
-		Log3 $name, 3, "NUKIDevice ($name) - $attrName : $attrVal";
+	
+	    RemoveInternalTimer( $hash );
+	    InternalTimer( gettimeofday()+2, "NUKIDevice_GetUpdate", $hash, 0 ) if( ReadingsVal( $hash->{NAME}, "state", 0 ) eq "disabled" );
+	    readingsSingleUpdate ( $hash, "state", "initialized", 1 );
+	    Log3 $name, 3, "NUKIDevice ($name) - enabled";
+        }
+    }
+    
+    if( $attrName eq "interval" ) {
+	if( $cmd eq "set" ) {
+	    if( $attrVal < 10 ) {
+		Log3 $name, 3, "NUKIDevice ($name) - interval too small, please use something > 10 (sec), default is 30 (sec)";
+		return "interval too small, please use something > 10 (sec), default is 60 (sec)";
+	    } else {
+		$hash->{INTERVAL} = $attrVal;
+		Log3 $name, 3, "NUKIDevice ($name) - set interval to $attrVal";
 	    }
-	    elsif( $cmd eq "del" ) {
-	    }
-	}
+	    
+	} else {
+	
+	    $hash->{INTERVAL} = 30;
+	    Log3 $name, 3, "NUKIDevice ($name) - set interval to default";
+        }
     }
     
     return undef;
@@ -177,22 +198,48 @@ sub NUKIDevice_Set($$@) {
     my ($hash, $name, @aa) = @_;
     my ($cmd, @args) = @aa;
 
-    my %obj;
+    my $lockAction;
 
 
-    if($cmd eq 'statusRequest') {
+    if( $cmd eq 'statusRequest' ) {
         return "usage: statusRequest" if( @args != 0 );
 
         NUKIDevice_GetUpdate($hash);
         return undef;
         
-    } elsif($cmd eq 'other') {
+    } elsif( $cmd eq 'lock' ) {
+        $lockAction = $cmd;
+    
+    } elsif( $cmd eq 'unlock' ) {
+        $lockAction = $cmd;
         
-    } elsif($cmd eq 'other2') {
+    } elsif( $cmd eq 'unlatch' ) {
+        $lockAction = $cmd;
+        
+    } elsif( $cmd eq 'locknGo' ) {
+        $lockAction = $cmd;
+        
+    } elsif( $cmd eq 'locknGoWithUnlatch' ) {
+        $lockAction = $cmd;
+        
     
     } else {
-        my $list = "statusRequest:noArg";
+        my $list = "statusRequest:noArg unlock:noArg lock:noArg unlatch:noArg locknGo:noArg locknGoWithUnlatch:noArg";
         return "Unknown argument $cmd, choose one of $list";
+    }
+    
+    my $result = NUKIDevice_ReadFromNUKIBridge($hash,"lockAction",$lockAction,$hash->{NUKIID} );
+    
+    if( !defined($result) ) {
+    
+        $hash->{STATE} = "unknown";
+        Log3 $name, 3, "NUKIDevice ($name) - unknown result to ReadFromNUKIBridge";
+        return;
+        
+    } else {
+    
+        NUKIDevice_Parse($hash,$result);
+        Log3 $name, 3, "NUKIDevice ($name) - Call NUKIDevice_Parse";
     }
 }
 
@@ -202,20 +249,35 @@ sub NUKIDevice_GetUpdate($) {
     my $name = $hash->{NAME};
     
     
-    #RemoveInternalTimer($hash);
-    my $result = NUKIDevice_ReadFromNUKIBridge($hash, "lockState", $hash->{NUKIID} );
+    Log3 $name, 3, "NUKIBridge ($name) - Call NUKIBridge_GetUpdate";
+    
+    my $result = NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
     
     if( !defined($result) ) {
+    
         $hash->{STATE} = "unknown";
+        Log3 $name, 3, "NUKIDevice ($name) - unknown result to ReadFromNUKIBridge";
         return;
+        
     } else {
     
         NUKIDevice_Parse($hash,$result);
+        Log3 $name, 3, "NUKIDevice ($name) - Call NUKIDevice_Parse";
     }
+}
+
+sub NUKIDevice_GetUpdateInternalTimer($) {
+
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
     
-    #InternalTimer(gettimeofday()+$hash->{INTERVAL}, "NUKIDevice_GetUpdate", $hash, 0) if( $hash->{INTERVAL} );
     
-    return undef;
+    NUKIDevice_GetUpdate($hash);
+    Log3 $name, 3, "NUKIDevice ($name) - Call NUKIDevice_GetUpdate";
+    
+    RemoveInternalTimer($hash);
+    InternalTimer(gettimeofday()+$hash->{INTERVAL}, "NUKIDevice_GetUpdateInternalTimer", $hash, 0) if( $hash->{INTERVAL} );
+    Log3 $name, 3, "NUKIDevice ($name) - Call InternalTimer";
 }
 
 sub NUKIDevice_ReadFromNUKIBridge($@) {

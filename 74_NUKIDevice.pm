@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 use Time::HiRes qw(gettimeofday);
 
-my $version = "0.1.37";
+my $version = "0.1.40";
 
 
 
@@ -155,8 +155,8 @@ sub NUKIDevice_Attr(@) {
 	if( $cmd eq "set" ) {
 	    if( $attrVal eq "0" ) {
 		RemoveInternalTimer( $hash );
-		InternalTimer( gettimeofday()+2, "NUKIDevice_GetUpdate", $hash, 0 ) if( ReadingsVal( $hash->{NAME}, "state", 0 ) eq "disabled" );
-		readingsSingleUpdate ( $hash, "state", "initialized", 1 );
+		InternalTimer( gettimeofday()+2, "NUKIDevice_GetUpdateInternalTimer", $hash, 0 );
+		readingsSingleUpdate ( $hash, "state", "Initialized", 1 );
 		Log3 $name, 3, "NUKIDevice ($name) - enabled";
 	    } else {
 		readingsSingleUpdate ( $hash, "state", "disabled", 1 );
@@ -167,8 +167,8 @@ sub NUKIDevice_Attr(@) {
 	} else {
 	
 	    RemoveInternalTimer( $hash );
-	    InternalTimer( gettimeofday()+2, "NUKIDevice_GetUpdate", $hash, 0 ) if( ReadingsVal( $hash->{NAME}, "state", 0 ) eq "disabled" );
-	    readingsSingleUpdate ( $hash, "state", "initialized", 1 );
+	    InternalTimer( gettimeofday()+2, "NUKIDevice_GetUpdateInternalTimer", $hash, 0 );
+	    readingsSingleUpdate ( $hash, "state", "Initialized", 1 );
 	    Log3 $name, 3, "NUKIDevice ($name) - enabled";
         }
     }
@@ -228,6 +228,7 @@ sub NUKIDevice_Set($$@) {
         return "Unknown argument $cmd, choose one of $list";
     }
     
+    
     my $result = NUKIDevice_ReadFromNUKIBridge($hash,"lockAction",$lockAction,$hash->{NUKIID} );
     
     if( !defined($result) ) {
@@ -249,21 +250,10 @@ sub NUKIDevice_GetUpdate($) {
     my $name = $hash->{NAME};
     
     
-    Log3 $name, 3, "NUKIBridge ($name) - Call NUKIBridge_GetUpdate";
-    
-    my $result = NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
-    
-    if( !defined($result) ) {
-    
-        $hash->{STATE} = "unknown";
-        Log3 $name, 3, "NUKIDevice ($name) - unknown result to ReadFromNUKIBridge";
-        return;
-        
-    } else {
-    
-        NUKIDevice_Parse($hash,$result);
-        Log3 $name, 3, "NUKIDevice ($name) - Call NUKIDevice_Parse";
-    }
+    NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
+    Log3 $name, 3, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call NUKIDevice_ReadFromNUKIBridge";
+
+    return undef;
 }
 
 sub NUKIDevice_GetUpdateInternalTimer($) {

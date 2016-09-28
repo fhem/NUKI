@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 use Time::HiRes qw(gettimeofday);
 
-my $version = "0.1.42";
+my $version = "0.1.45";
 
 
 
@@ -332,6 +332,14 @@ sub NUKIDevice_Parse($$) {
     
     readingsBeginUpdate($hash);
     
+    
+    my $battery;
+    if( $decode_json->{batteryCritical} eq "false" ) {
+        $battery = "ok";
+    } else {
+        $battery = "low";
+    }
+
     if( defined($hash->{helper}{lockAction}) ) {
     
         my ($state,$lockState);
@@ -344,17 +352,12 @@ sub NUKIDevice_Parse($$) {
         readingsBulkUpdate( $hash, "state", $state );
         readingsBulkUpdate( $hash, "lockState", $lockState );
         readingsBulkUpdate( $hash, "success", $decode_json->{success} );
+        readingsBulkUpdate( $hash, "batteryCritical", $decode_json->{batteryCritical} );
+        readingsBulkUpdate( $hash, "battery", $battery );
         
         delete $hash->{helper}{lockAction};
     
     } else {
-    
-        my $battery;
-        if( $decode_json->{batteryCritical} eq "false" ) {
-            $battery = "ok";
-        } else {
-            $battery = "low";
-        }
         
         readingsBulkUpdate( $hash, "batteryCritical", $decode_json->{batteryCritical} );
         readingsBulkUpdate( $hash, "lockState", $decode_json->{stateName} );

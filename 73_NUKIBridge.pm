@@ -34,7 +34,7 @@ use JSON;
 use Time::HiRes qw(gettimeofday);
 use HttpUtils;
 
-my $version = "0.1.40";
+my $version = "0.1.42";
 
 
 
@@ -335,21 +335,32 @@ sub NUKIBridge_Dispatch($$$) {
     if( ( $json =~ /Error/i ) and exists( $param->{code} ) ) {    
         
         readingsBulkUpdate( $hash, "lastError", "invalid API token" ) if( $param->{code} eq 401 );
-        readingsBulkUpdate( $hash, "lastError", "nukiId is not known" ) if( $param->{code} eq 404 );
-        readingsBulkUpdate( $hash, "lastError", "action is undefined" ) if( $param->{code} eq 400 );
+        readingsBulkUpdate( $hash, "lastError", "action is undefined" ) if( $param->{code} eq 400 and $hash == $param->{chash} );
+        
+        
+        ###### Fehler bei Antwort auf Anfrage eines logischen Devices ######
+        NUKIDevice_Parse($param->{chash},$param->{code}) if( $param->{code} eq 404 );
+        NUKIDevice_Parse($param->{chash},$param->{code}) if( $param->{code} eq 400 and $hash != $param->{chash} );       
+        
         
 	Log3 $name, 3, "NUKIBridge ($name) - invalid API token" if( $param->{code} eq 401 );
 	Log3 $name, 3, "NUKIBridge ($name) - nukiId is not known" if( $param->{code} eq 404 );
-	Log3 $name, 3, "NUKIBridge ($name) - action is undefined" if( $param->{code} eq 400 );
+	Log3 $name, 3, "NUKIBridge ($name) - action is undefined" if( $param->{code} eq 400 and $hash == $param->{chash} );
 	
 	
 	######### Zum testen da ich kein Nuki Smartlock habe ############
 	#if ( $param->{code} eq 404 ) {
-        #    Log3 $name, 3, "NUKIBridge ($name) - Test JSON String";
-        #    $json = '{"state": 1, "stateName": "locked", "batteryCritical": false, "success": "true"}';
+        #    if( defined($param->{chash}->{helper}{lockAction}) ) {
+        #        Log3 $name, 3, "NUKIBridge ($name) - Test JSON String for lockAction";
+        #        $json = '{"success": true, "batteryCritical": false}';
+        #    } else {
+        #        Log3 $name, 3, "NUKIBridge ($name) - Test JSON String for lockState";
+        #        $json = '{"state": 1, "stateName": "locked", "batteryCritical": false, "success": "true"}';
+        #    }
         #    NUKIDevice_Parse($param->{chash},$json);
         #}
-
+        
+        
         readingsEndUpdate( $hash, 1 );
 	return $param->{code};
     }

@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 use Time::HiRes qw(gettimeofday);
 
-my $version = "0.1.40";
+my $version = "0.1.42";
 
 
 
@@ -209,7 +209,7 @@ sub NUKIDevice_Set($$@) {
         
     } elsif( $cmd eq 'lock' ) {
         $lockAction = $cmd;
-    
+
     } elsif( $cmd eq 'unlock' ) {
         $lockAction = $cmd;
         
@@ -228,20 +228,10 @@ sub NUKIDevice_Set($$@) {
         return "Unknown argument $cmd, choose one of $list";
     }
     
+    $hash->{helper}{lockAction} = $lockAction;
+    NUKIDevice_ReadFromNUKIBridge($hash,"lockAction",$lockAction,$hash->{NUKIID} );
     
-    my $result = NUKIDevice_ReadFromNUKIBridge($hash,"lockAction",$lockAction,$hash->{NUKIID} );
-    
-    if( !defined($result) ) {
-    
-        $hash->{STATE} = "unknown";
-        Log3 $name, 3, "NUKIDevice ($name) - unknown result to ReadFromNUKIBridge";
-        return;
-        
-    } else {
-    
-        NUKIDevice_Parse($hash,$result);
-        Log3 $name, 3, "NUKIDevice ($name) - Call NUKIDevice_Parse";
-    }
+    return undef;
 }
 
 sub NUKIDevice_GetUpdate($) {
@@ -306,6 +296,27 @@ sub NUKIDevice_Parse($$) {
     my $name = $hash->{NAME};
 
 
+    #########################################
+    ####### Errorhandling #############
+    
+    if( $result =~ /\d{3}/ ) {
+        if( $result eq 400 ) {
+            readingsSingleUpdate( $hash, "state", "action is undefined", 1 );
+            Log3 $name, 3, "NUKIDevice ($name) - action is undefined";
+            return;
+        }
+    
+        if( $result eq 404 ) {
+            readingsSingleUpdate( $hash, "state", "nukiId is not known", 1 );
+            Log3 $name, 3, "NUKIDevice ($name) - nukiId is not known";
+            return;
+        }
+    }
+    
+    
+    #########################################
+    #### verarbeiten des JSON Strings #######
+    
     my $decode_json = decode_json($result);
     
     if( ref($decode_json) ne "HASH" ) {
@@ -317,23 +328,46 @@ sub NUKIDevice_Parse($$) {
     
     
     ############################
-    #### Status des Smartkey
-    my $battery;
-    if( $decode_json->{batteryCritical} eq "false" ) {
-        $battery = "ok";
-    } else {
-        $battery = "low";
-    }
-    
+    #### Status des Smartlock
     
     readingsBeginUpdate($hash);
-    readingsBulkUpdate( $hash, "state", $decode_json->{stateName} );
-    readingsBulkUpdate( $hash, "battery", $battery );
-    readingsBulkUpdate( $hash, "success", $decode_json->{success} );
+    
+    if( defined($hash->{helper}{lockAction}) ) {
+    
+        my ($state,$lockState);
+        
+        $state = $hash->{helper}{lockAction} if( $decode_json->{success} eq "true" );
+        $state = "error" if( $decode_json->{success} eq "false" );
+        $lockState = $hash->{helper}{lockAction} if( $decode_json->{success} eq "true" );
+        
+        
+        readingsBulkUpdate( $hash, "state", $state );
+        readingsBulkUpdate( $hash, "lockState", $lockState );
+        readingsBulkUpdate( $hash, "success", $decode_json->{success} );
+        
+        delete $hash->{helper}{lockAction};
+    
+    } else {
+    
+        my $battery;
+        if( $decode_json->{batteryCritical} eq "false" ) {
+            $battery = "ok";
+        } else {
+            $battery = "low";
+        }
+        
+        readingsBulkUpdate( $hash, "batteryCritical", $decode_json->{batteryCritical} );
+        readingsBulkUpdate( $hash, "lockState", $decode_json->{stateName} );
+        readingsBulkUpdate( $hash, "state", $decode_json->{stateName} );
+        readingsBulkUpdate( $hash, "battery", $battery );
+        readingsBulkUpdate( $hash, "success", $decode_json->{success} );
+    
+        Log3 $name, 3, "readings set for $name";
+    }
+    
     readingsEndUpdate( $hash, 1 );
     
-    
-    Log3 $name, 3, "readings set for $name";
+    return undef;
 }
 
 

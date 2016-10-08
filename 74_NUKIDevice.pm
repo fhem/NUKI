@@ -86,7 +86,7 @@ sub NUKIDevice_Define($$) {
     $hash->{NUKIID} 	= $nukiId;
     $hash->{VERSION} 	= $version;
     $hash->{STATE}      = 'Initialized';
-    $hash->{INTERVAL}   = 30;
+    $hash->{INTERVAL}   = 20;
     
     
     AssignIoPort($hash,$iodev) if( !$hash->{IODev} );

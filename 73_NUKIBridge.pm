@@ -31,10 +31,10 @@ package main;
 use strict;
 use warnings;
 use JSON;
-use Time::HiRes qw(gettimeofday);
+#use Time::HiRes qw(gettimeofday);
 use HttpUtils;
 
-my $version = "0.1.42";
+my $version = "0.1.50";
 
 
 
@@ -58,7 +58,6 @@ sub NUKIBridge_Initialize($) {
 
     # Consumer
     $hash->{SetFn}      = "NUKIBridge_Set";
-    #$hash->{NotifyFn}   = "NUKIBridge_Notify";
     $hash->{DefFn}	= "NUKIBridge_Define";
     $hash->{UndefFn}	= "NUKIBridge_Undef";
     $hash->{AttrFn}	= "NUKIBridge_Attr";
@@ -95,7 +94,7 @@ sub NUKIBridge_Define($$) {
     my $host    	= $a[2];
     my $token           = $a[3];
     my $port		= 8080;
-    my $interval  	= 180;
+    my $interval  	= 60;
 
     $hash->{HOST} 	= $host;
     $hash->{PORT} 	= $port;
@@ -114,7 +113,7 @@ sub NUKIBridge_Define($$) {
     
     if( $init_done ) {
         NUKIBridge_Get($hash) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
-        NUKIBridge_GetCheckBridgeAlive($hash) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
+        #NUKIBridge_GetCheckBridgeAlive($hash) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
     } else {
         InternalTimer( gettimeofday()+15, "NUKIBridge_Get", $hash, 0 ) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
     }
@@ -168,9 +167,9 @@ sub NUKIBridge_Attr(@) {
     
     if( $attrName eq "interval" ) {
 	if( $cmd eq "set" ) {
-	    if( $attrVal < 10 ) {
-		Log3 $name, 3, "NUKIBridge ($name) - interval too small, please use something > 10 (sec), default is 60 (sec)";
-		return "interval too small, please use something > 10 (sec), default is 60 (sec)";
+	    if( $attrVal < 30 ) {
+		Log3 $name, 3, "NUKIBridge ($name) - interval too small, please use something > 30 (sec), default is 60 (sec)";
+		return "interval too small, please use something > 30 (sec), default is 60 (sec)";
 	    } else {
 		$hash->{INTERVAL} = $attrVal;
 		Log3 $name, 3, "NUKIBridge ($name) - set interval to $attrVal";
@@ -229,7 +228,7 @@ sub NUKIBridge_Get($) {
     NUKIBridge_Call($hash,$hash,"list",undef,undef) if( !IsDisabled($name) );
     NUKIBridge_GetCheckBridgeAlive($hash);
     
-    Log3 $name, 3, "NUKIBridge ($name) - Call NUKIBridge_Get" if( !IsDisabled($name) );
+    Log3 $name, 4, "NUKIBridge ($name) - Call NUKIBridge_Get" if( !IsDisabled($name) );
 
     return 1;
 }
@@ -246,7 +245,7 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
         NUKIBridge_Call($hash,$hash,"list",undef,undef,1);
     
         InternalTimer( gettimeofday()+$hash->{INTERVAL}, "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
-        Log3 $name, 3, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
+        Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
     }
     
     return 1;
@@ -286,7 +285,7 @@ sub NUKIBridge_Call($$$$$;$) {
 	}
     );
     
-    Log3 $name, 3, "NUKIBridge ($name) - Send HTTP POST with URL $uri";
+    Log3 $name, 4, "NUKIBridge ($name) - Send HTTP POST with URL $uri";
 
     #return undef;      # beim Aufruf aus dem logischen Modul kam immer erst ein Fehler, deshalb auskommentiert
 }
@@ -309,7 +308,7 @@ sub NUKIBridge_Dispatch($$$) {
             readingsBulkUpdate( $hash, "state", "not connected");
             readingsBulkUpdate( $hash, "lastError", $err );
             
-            Log3 $name, 3, "NUKIBridge ($name) - Bridge ist offline";
+            Log3 $name, 4, "NUKIBridge ($name) - Bridge ist offline";
             readingsEndUpdate( $hash, 1 );
             return;
 	} 
@@ -317,7 +316,7 @@ sub NUKIBridge_Dispatch($$$) {
 	elsif ( $err ne "" ) {
 	
             readingsBulkUpdate( $hash, "lastError", $err );
-            Log3 $name, 3, "NUKIBridge ($name) - error while requesting: $err";
+            Log3 $name, 4, "NUKIBridge ($name) - error while requesting: $err";
             readingsEndUpdate( $hash, 1 );
             return $err;
 	}
@@ -326,7 +325,7 @@ sub NUKIBridge_Dispatch($$$) {
     if( $json eq "" and exists( $param->{code} ) && $param->{code} ne 200 ) {
     
         readingsBulkUpdate( $hash, "lastError", "Internal error, " .$param->{code} );
-	Log3 $name, 3, "NUKIBridge ($name) - received http code " .$param->{code}." without any data after requesting";
+	Log3 $name, 4, "NUKIBridge ($name) - received http code " .$param->{code}." without any data after requesting";
 
 	readingsEndUpdate( $hash, 1 );
 	return "received http code ".$param->{code}." without any data after requesting";
@@ -343,9 +342,9 @@ sub NUKIBridge_Dispatch($$$) {
         NUKIDevice_Parse($param->{chash},$param->{code}) if( $param->{code} eq 400 and $hash != $param->{chash} );       
         
         
-	Log3 $name, 3, "NUKIBridge ($name) - invalid API token" if( $param->{code} eq 401 );
-	Log3 $name, 3, "NUKIBridge ($name) - nukiId is not known" if( $param->{code} eq 404 );
-	Log3 $name, 3, "NUKIBridge ($name) - action is undefined" if( $param->{code} eq 400 and $hash == $param->{chash} );
+	Log3 $name, 4, "NUKIBridge ($name) - invalid API token" if( $param->{code} eq 401 );
+	Log3 $name, 4, "NUKIBridge ($name) - nukiId is not known" if( $param->{code} eq 404 );
+	Log3 $name, 4, "NUKIBridge ($name) - action is undefined" if( $param->{code} eq 400 and $hash == $param->{chash} );
 	
 	
 	######### Zum testen da ich kein Nuki Smartlock habe ############
@@ -368,7 +367,7 @@ sub NUKIBridge_Dispatch($$$) {
     if( $param->{code} eq 200 and $param->{endpoint} eq "list" and $param->{alive} eq 1 ) {
     
         readingsBulkUpdate( $hash, "state", "connected" );
-        Log3 $name, 3, "NUKIBridge ($name) - Bridge ist online";
+        Log3 $name, 5, "NUKIBridge ($name) - Bridge ist online";
             
         readingsEndUpdate( $hash, 1 );
         return;
@@ -437,13 +436,13 @@ sub NUKIBridge_Autocreate($$;$) {
         
         my $code = $name ."-".$nukiId;
         if( defined($modules{NUKIDevice}{defptr}{$code}) ) {
-            Log3 $name, 3, "$name: NukiId '$nukiId' already defined as '$modules{NUKIDevice}{defptr}{$code}->{NAME}'";
+            Log3 $name, 5, "$name: NukiId '$nukiId' already defined as '$modules{NUKIDevice}{defptr}{$code}->{NAME}'";
             next;
         }
         
         my $devname = "NUKIDevice" . $nukiId;
         my $define= "$devname NUKIDevice $nukiId IODev=$name";
-        Log3 $name, 3, "$name: create new device '$devname' for address '$nukiId'";
+        Log3 $name, 5, "$name: create new device '$devname' for address '$nukiId'";
 
         my $cmdret= CommandDefine(undef,$define);
         if($cmdret) {

@@ -31,9 +31,9 @@ package main;
 use strict;
 use warnings;
 use JSON;
-use Time::HiRes qw(gettimeofday);
+#use Time::HiRes qw(gettimeofday);
 
-my $version = "0.1.45";
+my $version = "0.1.50";
 
 
 
@@ -49,7 +49,8 @@ sub NUKIDevice_Initialize($) {
     
     $hash->{AttrList} 	    = "IODev ".
                               "disable:1 ".
-                               $readingFnAttributes;
+                              "interval ".
+                              $readingFnAttributes;
 
 
 
@@ -176,7 +177,7 @@ sub NUKIDevice_Attr(@) {
     if( $attrName eq "interval" ) {
 	if( $cmd eq "set" ) {
 	    if( $attrVal < 10 ) {
-		Log3 $name, 3, "NUKIDevice ($name) - interval too small, please use something > 10 (sec), default is 30 (sec)";
+		Log3 $name, 3, "NUKIDevice ($name) - interval too small, please use something > 10 (sec), default is 20 (sec)";
 		return "interval too small, please use something > 10 (sec), default is 60 (sec)";
 	    } else {
 		$hash->{INTERVAL} = $attrVal;
@@ -185,7 +186,7 @@ sub NUKIDevice_Attr(@) {
 	    
 	} else {
 	
-	    $hash->{INTERVAL} = 30;
+	    $hash->{INTERVAL} = 20;
 	    Log3 $name, 3, "NUKIDevice ($name) - set interval to default";
         }
     }
@@ -241,7 +242,7 @@ sub NUKIDevice_GetUpdate($) {
     
     
     NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
-    Log3 $name, 3, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call NUKIDevice_ReadFromNUKIBridge";
+    Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call NUKIDevice_ReadFromNUKIBridge";
 
     return undef;
 }
@@ -253,11 +254,11 @@ sub NUKIDevice_GetUpdateInternalTimer($) {
     
     
     NUKIDevice_GetUpdate($hash);
-    Log3 $name, 3, "NUKIDevice ($name) - Call NUKIDevice_GetUpdate";
+    Log3 $name, 5, "NUKIDevice ($name) - Call NUKIDevice_GetUpdate";
     
     RemoveInternalTimer($hash);
     InternalTimer(gettimeofday()+$hash->{INTERVAL}, "NUKIDevice_GetUpdateInternalTimer", $hash, 0) if( $hash->{INTERVAL} );
-    Log3 $name, 3, "NUKIDevice ($name) - Call InternalTimer";
+    Log3 $name, 5, "NUKIDevice ($name) - Call InternalTimer";
 }
 
 sub NUKIDevice_ReadFromNUKIBridge($@) {
@@ -279,7 +280,7 @@ sub NUKIDevice_ReadFromNUKIBridge($@) {
         !$iohash->{TYPE} ||
         !$modules{$iohash->{TYPE}} ||
         !$modules{$iohash->{TYPE}}{ReadFn}) {
-        Log3 $name, 5, "No I/O device or ReadFn found for $name";
+        Log3 $name, 3, "No I/O device or ReadFn found for $name";
         return;
     }
 
@@ -324,7 +325,7 @@ sub NUKIDevice_Parse($$) {
         return undef;
     }
 
-    Log3 $name, 3, "parse status message for $name";
+    Log3 $name, 5, "parse status message for $name";
     
     
     ############################
@@ -365,7 +366,7 @@ sub NUKIDevice_Parse($$) {
         readingsBulkUpdate( $hash, "battery", $battery );
         readingsBulkUpdate( $hash, "success", $decode_json->{success} );
     
-        Log3 $name, 3, "readings set for $name";
+        Log3 $name, 5, "readings set for $name";
     }
     
     readingsEndUpdate( $hash, 1 );

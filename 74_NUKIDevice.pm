@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.1.50";
+my $version = "0.2.0";
 
 
 
@@ -382,9 +382,13 @@ sub NUKIDevice_Parse($$) {
 
 
 =pod
+=item device
+=item summary    
+=item summary_DE Modul zur Steuerung des Nuki Smartlocks.
+
 =begin html
 
-<a name="Nuki"></a>
+<a name="NUKIDevice"></a>
 <h3>NUKIDevice</h3>
 <ul>
   
@@ -393,10 +397,57 @@ sub NUKIDevice_Parse($$) {
 =end html
 =begin html_DE
 
-<a name="Nuki"></a>
+<a name="NUKIDevice"></a>
 <h3>NUKIDevice</h3>
 <ul>
-  
+  <u><b>NUKIDevice - Steuert das Nuki Smartlock</b></u>
+  <br>
+  Das Nuki Modul verbindet FHEM über die Nuki Bridge  mit einem Nuki Smartlock. Es ist dann m&ouml;glich das Schloss zu ver- und entriegeln.<br>
+  In der Regel werden die Nuki Devices automatisch durch das Bridgemodul angelegt.
+  <br><br>
+  <a name="NUKIDevicedefine"></a>
+  <b>Define</b>
+  <ul><br>
+    <code>define &lt;name&gt; NUKIDevice &lt;Nuki-Id&gt; &lt;IODev-Device&gt;</code>
+    <br><br>
+    Beispiel:
+    <ul><br>
+      <code>define Haust&uuml;r NUKIDevice 1 NBridge1</code><br>
+    </ul>
+    <br>
+    Diese Anweisung erstellt ein NUKIDevice mit Namen Haust&uuml;r, der NukiId 1 sowie dem IODev Device NBridge1.<br>
+    Nach dem anlegen des Devices wird automatisch der aktuelle Zustand des Smartlocks aus der Bridge gelesen.
+  </ul>
+  <br><br>
+  <a name="NUKIDevicereadings"></a>
+  <b>Readings</b>
+  <ul>
+    <li>state - Status des Smartlock bzw. Fehlermeldung von Fehler vorhanden.</li>
+    <li>lockState - aktueller Schlie&szlig;status uncalibrated, locked, unlocked, unlocked (lock ‘n’ go), unlatched, locking, unlocking, unlatching, motor blocked, undefined.</li>
+    <li>succes - true, false Gibt des Status des letzten Schlie&szlig;befehles wieder. Geklappt oder nicht geklappt.</li>
+    <li>batteryCritical - Ist die Batterie in einem kritischen Zustand? true, false</li>
+    <li>battery - Status der Batterie, ok/low</li>
+  </ul>
+  <br><br>
+  <a name="NUKIDeviceset"></a>
+  <b>Set</b>
+  <ul>
+    <li>statusRequest - ruft den aktuellen Status des Smartlocks von der Bridge ab.</li>
+    <li>lock - verschlie&szlig;en</li>
+    <li>unlock - aufschlie&szlig;en</li>
+    <li>unlatch - entriegeln/Falle &ouml;ffnen.</li>
+    <li>locknGo - verschlie&szlig;en wenn gegangen</li>
+    <li>locknGoWithUnlatch - verschlie&szlig;en nach dem die Falle ge&ouml;ffnet wurde.</li>
+    <br>
+  </ul>
+  <br><br>
+  <a name="NUKIDeviceattribut"></a>
+  <b>Attribute</b>
+  <ul>
+    <li>disable - deaktiviert das Nuki Device</li>
+    <li>interval - verändert den Interval für den statusRequest</li>
+    <br>
+  </ul>
 </ul>
 
 =end html_DE

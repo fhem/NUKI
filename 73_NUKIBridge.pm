@@ -34,7 +34,7 @@ use JSON;
 #use Time::HiRes qw(gettimeofday);
 use HttpUtils;
 
-my $version = "0.2.0";
+my $version = "0.2.1";
 my $bridgeAPI = "1.0.2";
 
 
@@ -102,7 +102,6 @@ sub NUKIBridge_Define($$) {
     $hash->{TOKEN} 	= $token;
     $hash->{INTERVAL} 	= $interval;
     $hash->{VERSION} 	= $version;
-    $hash->{BRIDGEAPI}  = $bridgeAPI;
     
 
 
@@ -465,6 +464,7 @@ sub NUKIBridge_Autocreate($$;$) {
         readingsBulkUpdate( $hash, "smartlockCount", $autocreated );
     }
     
+    readingsBulkUpdate( $hash, "bridgeAPI", $bridgeAPI );
     readingsEndUpdate( $hash, 1 );
     
     
@@ -491,7 +491,50 @@ sub NUKIBridge_Autocreate($$;$) {
 <a name="NUKIBridge"></a>
 <h3>NUKIBridge</h3>
 <ul>
-  
+  <u><b>NUKIBridge - controls the Nuki Smartlock over the Nuki Bridge</b></u>
+  <br>
+  The Nuki Bridge module connects FHEM to the Nuki Bridge and then reads all the smartlocks available on the bridge. Furthermore, the detected Smartlocks are automatically created as independent devices.
+  <br><br>
+  <a name="NUKIBridgedefine"></a>
+  <b>Define</b>
+  <ul><br>
+    <code>define &lt;name&gt; NUKIBridge &lt;HOST&gt; &lt;API-TOKEN&gt;</code>
+    <br><br>
+    Example:
+    <ul><br>
+      <code>define NBridge1 NUKIBridge 192.168.0.23 F34HK6</code><br>
+    </ul>
+    <br>
+    This statement creates a NUKIBridge device with the name NBridge1 and the IP 192.168.0.23 as well as the token F34HK6.<br>
+    After the bridge device is created, all available Smartlocks are automatically placed in FHEM.
+  </ul>
+  <br><br>
+  <a name="NUKIBridgereadings"></a>
+  <b>Readings</b>
+  <ul>
+    <li>0_nukiId - ID of the first found Nuki Smartlock</li>
+    <li>0_name - Name of the first found Nuki Smartlock</li>
+    <li>smartlockCount - number of all found Smartlocks</li>
+    <li>bridgeAPI - API Version of bridge</li>
+    <br>
+    The preceding number is continuous, starts with 0 und returns the properties of <b>one</b> Smartlock.
+   </ul>
+  <br><br>
+  <a name="NUKIBridgeset"></a>
+  <b>Set</b>
+  <ul>
+    <li>autocreate - Prompts to re-read all Smartlocks from the bridge and if not already present in FHEM, create the autimatic.</li>
+    <li>statusRequest - starts a checkAlive of the bridge, it is determined whether the bridge is still online</li>
+    <br>
+  </ul>
+  <br><br>
+  <a name="NUKIBridgeattribut"></a>
+  <b>Attributes</b>
+  <ul>
+    <li>disable - disables the Nuki Bridge</li>
+    <li>interval - changes the interval for the CheckAlive</li>
+    <br>
+  </ul>
 </ul>
 
 =end html
@@ -524,6 +567,7 @@ sub NUKIBridge_Autocreate($$;$) {
     <li>0_nukiId - ID des ersten gefundenen Nuki Smartlocks</li>
     <li>0_name - Name des ersten gefunden Nuki Smartlocks</li>
     <li>smartlockCount - Anzahl aller gefundenen Smartlock</li>
+    <li>bridgeAPI - API Version der Bridge</li>
     <br>
     Die vorangestellte Zahl ist forlaufend und gibt beginnend bei 0 die Eigenschaften <b>Eines</b> Smartlocks wieder.
   </ul>

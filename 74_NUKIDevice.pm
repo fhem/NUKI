@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.2.0";
+my $version = "0.2.1";
 
 
 
@@ -391,7 +391,54 @@ sub NUKIDevice_Parse($$) {
 <a name="NUKIDevice"></a>
 <h3>NUKIDevice</h3>
 <ul>
-  
+  <u><b>NUKIDevice - Controls the Nuki Smartlock</b></u>
+  <br>
+  The Nuki module connects FHEM over the Nuki Bridge with a Nuki Smartlock. After that, it´s possible to lock and unlock the Smartlock.<br>
+  Normally the Nuki devices are automatically created by the bridge module.
+  <br><br>
+  <a name="NUKIDevicedefine"></a>
+  <b>Define</b>
+  <ul><br>
+    <code>define &lt;name&gt; NUKIDevice &lt;Nuki-Id&gt; &lt;IODev-Device&gt;</code>
+    <br><br>
+    Example:
+    <ul><br>
+      <code>define Frontdoor NUKIDevice 1 NBridge1</code><br>
+    </ul>
+    <br>
+    This statement creates a NUKIDevice with the name Frontdoor, the NukiId 1 and the IODev device NBridge1.<br>
+    After the device has been created, the current state of the Smartlock is automatically read from the bridge.
+  </ul>
+  <br><br>
+  <a name="NUKIDevicereadings"></a>
+  <b>Readings</b>
+  <ul>
+    <li>state - Status of the Smartlock or error message if any error.</li>
+    <li>lockState - current lock status uncalibrated, locked, unlocked, unlocked (lock ‘n’ go), unlatched, locking, unlocking, unlatching, motor blocked, undefined.</li>
+    <li>succes - true, false   Returns the status of the last closing command. Ok or not Ok.</li>
+    <li>batteryCritical - Is the battery in a critical state? True, false</li>
+    <li>battery - battery status, ok / low</li>
+  </ul>
+  <br><br>
+  <a name="NUKIDeviceset"></a>
+  <b>Set</b>
+  <ul>
+    <li>statusRequest - retrieves the current state of the smartlock from the bridge.</li>
+    <li>lock - lock</li>
+    <li>unlock - unlock</li>
+    <li>unlatch - unlock / open Door</li>
+    <li>locknGo - lock when gone</li>
+    <li>locknGoWithUnlatch - lock after the door has been opened</li>
+    <br>
+  </ul>
+  <br><br>
+  <a name="NUKIDeviceattribut"></a>
+  <b>Attributes</b>
+  <ul>
+    <li>disable - disables the Nuki device</li>
+    <li>interval - changes the interval for the statusRequest</li>
+    <br>
+  </ul>
 </ul>
 
 =end html

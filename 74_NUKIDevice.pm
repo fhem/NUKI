@@ -383,7 +383,7 @@ sub NUKIDevice_Parse($$) {
 
 =pod
 =item device
-=item summary    
+=item summary    Modul to control the Nuki Smartlock's
 =item summary_DE Modul zur Steuerung des Nuki Smartlocks.
 
 =begin html

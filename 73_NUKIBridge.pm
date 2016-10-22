@@ -483,7 +483,7 @@ sub NUKIBridge_Autocreate($$;$) {
 
 =pod
 =item device
-=item summary    
+=item summary    Modul to control the Nuki Smartlock's over the Nuki Bridge.
 =item summary_DE Modul zur Steuerung des Nuki Smartlock über die Nuki Bridge.
 
 =begin html

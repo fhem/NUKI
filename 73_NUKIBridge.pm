@@ -46,7 +46,7 @@ use JSON;
 #use Time::HiRes qw(gettimeofday);
 use HttpUtils;
 
-my $version = "0.3.1";
+my $version = "0.3.3";
 my $bridgeAPI = "1.0.2";
 
 
@@ -71,6 +71,7 @@ sub NUKIBridge_Initialize($) {
 
     # Consumer
     $hash->{SetFn}      = "NUKIBridge_Set";
+    $hash->{GetFn}      = "NUKIBridge_Get";
     $hash->{DefFn}	= "NUKIBridge_Define";
     $hash->{UndefFn}	= "NUKIBridge_Undef";
     $hash->{AttrFn}	= "NUKIBridge_Attr";
@@ -125,10 +126,9 @@ sub NUKIBridge_Define($$) {
     RemoveInternalTimer($hash);
     
     if( $init_done ) {
-        NUKIBridge_Get($hash) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
-        #NUKIBridge_GetCheckBridgeAlive($hash) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
+        NUKIBridge_firstRun($hash) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
     } else {
-        InternalTimer( gettimeofday()+15, "NUKIBridge_Get", $hash, 0 ) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
+        InternalTimer( gettimeofday()+15, "NUKIBridge_firstRun", $hash, 0 ) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
     }
 
     $modules{NUKIBridge}{defptr}{$hash->{HOST}} = $hash;
@@ -231,7 +231,24 @@ sub NUKIBridge_Set($@) {
 
 }
 
-sub NUKIBridge_Get($) {
+sub NUKIBridge_Get($@) {
+
+    my ($hash, $name, $cmd, @args) = @_;
+    my ($arg, @params) = @args;
+    
+    if($cmd eq 'logFile') {
+        return "usage: logFile" if( @args != 0 );
+
+        NUKIBridge_getLogfile($hash);
+        
+    } else {
+        my $list = "logFile:noArg";
+        return "Unknown argument $cmd, choose one of $list";
+    }
+
+}
+
+sub NUKIBridge_firstRun($) {
 
     my ($hash) = @_;
     my $name = $hash->{NAME};
@@ -299,8 +316,6 @@ sub NUKIBridge_Call($$$$$;$) {
     );
     
     Log3 $name, 4, "NUKIBridge ($name) - Send HTTP POST with URL $uri";
-
-    #return undef;      # beim Aufruf aus dem logischen Modul kam immer erst ein Fehler, deshalb auskommentiert
 }
 
 sub NUKIBridge_Dispatch($$$) {
@@ -487,6 +502,181 @@ sub NUKIBridge_Autocreate($$;$) {
 
     return "created $autocreated devices";
 }
+
+sub NUKIBridge_getLogfile($) {
+
+    my ($hash)  = @_;
+    my $name    = $hash->{NAME};
+
+    
+    my $decode_json = NUKIBridge_CallBlocking($hash,"log");
+    
+    Log3 $name, 3, "NUKIBridge ($name) - Kurz vor der Bedingung nach decode_json ARRAY";
+
+    
+    if( ref($decode_json) eq "ARRAY" and scalar(@{$decode_json}) > 0 ) {
+        Log3 $name, 3, "NUKIBridge ($name) - Innerhalb der ARRAY Bedingung";
+    
+        my $ret = '<html><table width=100%><tr><td>';
+
+        $ret .= '<table class="block wide">';
+
+            $ret .= '<tr class="odd">';
+            $ret .= "<td><b>Timestamp</b></td>";
+            $ret .= "<td><b>Type</b></td>";
+            $ret .= '</tr>';
+    
+        foreach my $logs (@{$decode_json}) {
+        
+            $ret .= "<td>$logs->{timestamp}</td>";
+            $ret .= "<td>$logs->{type}</td>";
+            $ret .= '</tr>';
+        }
+    
+        $ret .= '</table></td></tr>';
+        $ret .= '</table></html>';
+     
+        return $ret;
+    }
+}
+
+sub NUKIBridge_CallBlocking($$) {
+
+    my ($hash,$path)  = @_;
+    my $name    = $hash->{NAME};
+    my $host    = $hash->{HOST};
+    my $port    = $hash->{PORT};
+    my $token   = $hash->{TOKEN};
+    
+    my $url = "http://" . $hash->{HOST} . ":" . $port;
+    $url .= "/" . $path if( defined $path);
+    $url .= "?token=" . $token if( defined($token) );
+    
+    
+    my($err,$data)  = HttpUtils_BlockingGet({
+      url           => $url,
+      timeout       => 4,
+      method        => "GET",
+      noshutdown    => 1,
+      header        => "Content-Type: application/json",
+    });
+
+    if( !$data ) {
+      Log3 $name, 3, "$name: empty answer received for $url";
+      return undef;
+    } elsif( $data =~ m'HTTP/1.1 200 OK' ) {
+      Log3 $name, 4, "$name: empty answer received for $url";
+      return undef;
+    } elsif( $data !~ m/^[\[{].*[\]}]$/ ) {
+      Log3 $name, 3, "$name: invalid json detected for $url: $data";
+      return undef;
+    }
+    
+    $data = '[
+{"timestamp": "2016-10-23T08:21:56+00:00", "type": "WLAN-SocketConnected", "connection": 0},
+{"timestamp": "2016-10-23T08:21:53+00:00", "type": "WLAN-SocketDisconnected", "connection": 0},
+{"timestamp": "2016-10-23T08:21:53+00:00", "type": "BLE-Disconnected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:21:52+00:00", "type": "BLE-ReceivingMsg", "nukiId": "ABCDEF", "cmdId": "000C"},
+{"timestamp": "2016-10-23T08:21:51+00:00", "type": "BLE-SendingMsg", "nukiId": "ABCDEF", "cmdId": "0001"},
+{"timestamp": "2016-10-23T08:21:51+00:00", "type": "BLE-Connect", "handles": [24, 28]},
+{"timestamp": "2016-10-23T08:21:51+00:00", "type": "BLE-Connected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:21:49+00:00", "type": "BLE-Connect", "macAddr": "123456"},
+{"timestamp": "2016-10-23T08:21:49+00:00", "type": "BLE-Connect", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:21:49+00:00", "type": "HTTP-LockState", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:21:49+00:00", "type": "WLAN-SocketConnected", "connection": 0},
+{"timestamp": "2016-10-23T08:21:38+00:00", "type": "WLAN-SocketDisconnected", "connection": 0},
+{"timestamp": "2016-10-23T08:21:16+00:00", "type": "HTTP-List"},
+{"timestamp": "2016-10-23T08:21:16+00:00", "type": "WLAN-SocketConnected", "connection": 0},
+{"timestamp": "2016-10-23T08:20:59+00:00", "type": "WLAN-SocketDisconnected", "connection": 0},
+{"timestamp": "2016-10-23T08:20:59+00:00", "type": "BLE-Disconnected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:20:58+00:00", "type": "BLE-ReceivingMsg", "nukiId": "ABCDEF", "cmdId": "000C"},
+{"timestamp": "2016-10-23T08:20:57+00:00", "type": "BLE-SendingMsg", "nukiId": "ABCDEF", "cmdId": "0001"},
+{"timestamp": "2016-10-23T08:20:57+00:00", "type": "BLE-Connect", "handles": [24, 28]},
+{"timestamp": "2016-10-23T08:20:57+00:00", "type": "BLE-Connected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:20:56+00:00", "type": "BLE-Connect", "macAddr": "123456"},
+{"timestamp": "2016-10-23T08:20:56+00:00", "type": "BLE-Connect", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:20:56+00:00", "type": "HTTP-LockState", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:20:56+00:00", "type": "WLAN-SocketConnected", "connection": 0},
+{"timestamp": "2016-10-23T08:20:37+00:00", "type": "WLAN-SocketDisconnected", "connection": 0},
+{"timestamp": "2016-10-23T08:20:16+00:00", "type": "HTTP-List"},
+{"timestamp": "2016-10-23T08:20:16+00:00", "type": "WLAN-SocketConnected", "connection": 0},
+{"timestamp": "2016-10-23T08:19:58+00:00", "type": "WLAN-SocketDisconnected", "connection": 0},
+{"timestamp": "2016-10-23T08:19:58+00:00", "type": "BLE-Disconnected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:19:57+00:00", "type": "BLE-ReceivingMsg", "nukiId": "ABCDEF", "cmdId": "000C"},
+{"timestamp": "2016-10-23T08:19:56+00:00", "type": "BLE-SendingMsg", "nukiId": "ABCDEF", "cmdId": "0001"},
+{"timestamp": "2016-10-23T08:19:56+00:00", "type": "BLE-Connect", "handles": [24, 28]},
+{"timestamp": "2016-10-23T08:19:56+00:00", "type": "BLE-Connected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:19:56+00:00", "type": "BLE-Connect", "macAddr": "123456"},
+{"timestamp": "2016-10-23T08:19:56+00:00", "type": "BLE-Connect", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:19:56+00:00", "type": "HTTP-LockState", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:19:56+00:00", "type": "WLAN-SocketConnected", "connection": 0},
+{"timestamp": "2016-10-23T08:19:39+00:00", "type": "WLAN-SocketDisconnected", "connection": 0},
+{"timestamp": "2016-10-23T08:19:39+00:00", "type": "BLE-Disconnected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:19:38+00:00", "type": "BLE-ReceivingMsg", "nukiId": "ABCDEF", "cmdId": "000C"},
+{"timestamp": "2016-10-23T08:19:36+00:00", "type": "BLE-SendingMsg", "nukiId": "ABCDEF", "cmdId": "0001"},
+{"timestamp": "2016-10-23T08:19:36+00:00", "type": "BLE-Connect", "handles": [24, 28]},
+{"timestamp": "2016-10-23T08:19:36+00:00", "type": "BLE-Connected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:19:36+00:00", "type": "BLE-Connect", "macAddr": "123456"},
+{"timestamp": "2016-10-23T08:19:36+00:00", "type": "BLE-Connect", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:19:36+00:00", "type": "HTTP-LockState", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:19:36+00:00", "type": "WLAN-SocketConnected", "connection": 0},
+{"timestamp": "2016-10-23T08:19:26+00:00", "type": "WLAN-SocketDisconnected", "connection": 0},
+{"timestamp": "2016-10-23T08:19:16+00:00", "type": "HTTP-List"},
+{"timestamp": "2016-10-23T08:19:16+00:00", "type": "WLAN-SocketConnected", "connection": 0},
+{"timestamp": "2016-10-23T08:18:58+00:00", "type": "WLAN-SocketDisconnected", "connection": 0},
+{"timestamp": "2016-10-23T08:18:58+00:00", "type": "BLE-Disconnected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:18:57+00:00", "type": "BLE-ReceivingMsg", "nukiId": "ABCDEF", "cmdId": "000C"},
+{"timestamp": "2016-10-23T08:18:56+00:00", "type": "BLE-SendingMsg", "nukiId": "ABCDEF", "cmdId": "0001"},
+{"timestamp": "2016-10-23T08:18:56+00:00", "type": "BLE-Connect", "handles": [24, 28]},
+{"timestamp": "2016-10-23T08:18:56+00:00", "type": "BLE-Connected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:18:56+00:00", "type": "BLE-Connect", "macAddr": "123456"},
+{"timestamp": "2016-10-23T08:18:56+00:00", "type": "BLE-Connect", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:18:56+00:00", "type": "HTTP-LockState", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:18:56+00:00", "type": "WLAN-SocketConnected", "connection": 0},
+{"timestamp": "2016-10-23T08:18:49+00:00", "type": "WLAN-SocketDisconnected", "connection": 0},
+{"timestamp": "2016-10-23T08:18:39+00:00", "type": "BLE-Disconnected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:18:08+00:00", "type": "BLE-Connect", "handles": [24, 28]},
+{"timestamp": "2016-10-23T08:18:08+00:00", "type": "BLE-Connected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:18:08+00:00", "type": "BLE-Connect", "macAddr": "123456"},
+{"timestamp": "2016-10-23T08:18:08+00:00", "type": "BLE-Connect", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:18:08+00:00", "type": "BLE-Disconnected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:17:57+00:00", "type": "SSE-KeyturnerResponse", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:17:57+00:00", "type": "BLE-ReceivingSSE", "nukiId": "ABCDEF", "auth": "00000201"},
+{"timestamp": "2016-10-23T08:17:56+00:00", "type": "BLE-SendingSSE", "nukiId": "ABCDEF", "auth": "00000201"},
+{"timestamp": "2016-10-23T08:17:56+00:00", "type": "BLE-Connect", "handles": [24, 28]},
+{"timestamp": "2016-10-23T08:17:56+00:00", "type": "BLE-Connected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:17:56+00:00", "type": "HTTP-LockState", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:17:56+00:00", "type": "WLAN-SocketConnected", "connection": 0},
+{"timestamp": "2016-10-23T08:17:56+00:00", "type": "BLE-Connect", "macAddr": "123456"},
+{"timestamp": "2016-10-23T08:17:56+00:00", "type": "BLE-Connect", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:17:56+00:00", "type": "SSE-KeyturnerRequest", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:17:41+00:00", "type": "BLE-Disconnected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:17:36+00:00", "type": "WLAN-SocketDisconnected", "connection": 0},
+{"timestamp": "2016-10-23T08:17:31+00:00", "type": "SSE-KeyturnerResponse", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:17:31+00:00", "type": "BLE-ReceivingSSE", "nukiId": "ABCDEF", "auth": "00000201"},
+{"timestamp": "2016-10-23T08:17:29+00:00", "type": "BLE-SendingSSE", "nukiId": "ABCDEF", "auth": "00000201"},
+{"timestamp": "2016-10-23T08:17:29+00:00", "type": "BLE-Connect", "handles": [24, 28]},
+{"timestamp": "2016-10-23T08:17:29+00:00", "type": "BLE-Connected", "nukiId": "ABCDEF"},
+{"timestamp": "2016-10-23T08:17:29+00:00", "type": "BLE-Connect", "macAddr": "123456"}
+]';
+
+    my $decode_json = decode_json($data);
+
+    return undef if( !$decode_json );
+    
+    Log3 $name, 3, "NUKIBridge ($name) - Blocking HTTP Abfrage beendet";
+    return ($decode_json);
+}
+
+
+
+
+
+
+
+
+
+
 
 1;
 

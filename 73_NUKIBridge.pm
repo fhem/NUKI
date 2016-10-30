@@ -25,6 +25,18 @@
 #
 ###############################################################################
 
+#################################
+######### Wichtige Hinweise und Links #################
+
+## Beispiel für Logausgabe
+# https://forum.fhem.de/index.php/topic,55756.msg508412.html#msg508412
+
+##
+#
+
+
+################################
+
 
 package main;
 
@@ -34,7 +46,7 @@ use JSON;
 #use Time::HiRes qw(gettimeofday);
 use HttpUtils;
 
-my $version = "0.2.1";
+my $version = "0.3.1";
 my $bridgeAPI = "1.0.2";
 
 
@@ -274,7 +286,7 @@ sub NUKIBridge_Call($$$$$;$) {
     HttpUtils_NonblockingGet(
 	{
 	    url        => $uri,
-	    timeout    => 10,
+	    timeout    => 60,
 	    hash       => $hash,
 	    chash      => $chash,
 	    endpoint   => $path,

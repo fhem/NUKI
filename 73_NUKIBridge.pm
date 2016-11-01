@@ -46,7 +46,7 @@ use JSON;
 #use Time::HiRes qw(gettimeofday);
 use HttpUtils;
 
-my $version = "0.3.3";
+my $version = "0.3.4";
 my $bridgeAPI = "1.0.2";
 
 
@@ -311,14 +311,14 @@ sub NUKIBridge_Call($$$$$;$) {
 	    method     => "GET",
 	    doTrigger  => 1,
 	    noshutdown => 1,
-	    callback   => \&NUKIBridge_Dispatch,
+	    callback   => \&NUKIBridge_Distribution,
 	}
     );
     
     Log3 $name, 4, "NUKIBridge ($name) - Send HTTP POST with URL $uri";
 }
 
-sub NUKIBridge_Dispatch($$$) {
+sub NUKIBridge_Distribution($$$) {
 
     my ( $param, $err, $json ) = @_;
     my $hash = $param->{hash};
@@ -327,6 +327,14 @@ sub NUKIBridge_Dispatch($$$) {
     my $host = $hash->{HOST};
     
 
+    
+    Log3 $name, 3, "NUKIBridge ($name) - Param Alive: $param->{alive}";
+    Log3 $name, 3, "NUKIBridge ($name) - Param Code: $param->{code}";
+    Log3 $name, 3, "NUKIBridge ($name) - Error: $err";
+    Log3 $name, 3, "NUKIBridge ($name) - JSON: $json";
+    
+    
+    
     readingsBeginUpdate($hash);
     
     if( defined( $err ) ) {
@@ -555,7 +563,7 @@ sub NUKIBridge_CallBlocking($$) {
     
     my($err,$data)  = HttpUtils_BlockingGet({
       url           => $url,
-      timeout       => 4,
+      timeout       => 3,
       method        => "GET",
       noshutdown    => 1,
       header        => "Content-Type: application/json",

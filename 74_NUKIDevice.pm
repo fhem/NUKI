@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.3.1";
+my $version = "0.3.7";
 
 
 
@@ -257,8 +257,8 @@ sub NUKIDevice_GetUpdateInternalTimer($) {
     Log3 $name, 5, "NUKIDevice ($name) - Call NUKIDevice_GetUpdate";
     
     RemoveInternalTimer($hash);
-    InternalTimer(gettimeofday()+$hash->{INTERVAL}, "NUKIDevice_GetUpdateInternalTimer", $hash, 0) if( $hash->{INTERVAL} );
-    Log3 $name, 5, "NUKIDevice ($name) - Call InternalTimer";
+    #InternalTimer(gettimeofday()+$hash->{INTERVAL}, "NUKIDevice_GetUpdateInternalTimer", $hash, 0) if( $hash->{INTERVAL} );
+    #Log3 $name, 5, "NUKIDevice ($name) - Call InternalTimer";
 }
 
 sub NUKIDevice_ReadFromNUKIBridge($@) {
@@ -291,9 +291,9 @@ sub NUKIDevice_ReadFromNUKIBridge($@) {
     return $ret;
 }
 
-sub NUKIDevice_Parse($$) {
+sub NUKIDevice_Parse($$$) {
 
-    my($hash,$result) = @_;
+    my($hash,$result,$path) = @_;
     my $name = $hash->{NAME};
 
 

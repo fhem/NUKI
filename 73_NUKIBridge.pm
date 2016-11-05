@@ -374,10 +374,8 @@ sub NUKIBridge_Call($$$$$) {
 	    hash       => $hash,
 	    chash      => $chash,
 	    endpoint   => $path,
-	    header     => "agent: FHEM/1.0\r\nUser-Agent: FHEM/1.0\r\nAccept: application/json",
+	    header     => "Accept: application/json",
 	    method     => "GET",
-	    doTrigger  => 1,
-	    noshutdown => 1,
 	    callback   => \&NUKIBridge_Distribution,
 	}
     );
@@ -398,7 +396,9 @@ sub NUKIBridge_Distribution($$$) {
     Log3 $name, 3, "NUKIBridge ($name) - Param Alive: $param->{alive}";
     Log3 $name, 3, "NUKIBridge ($name) - Param Code: $param->{code}";
     Log3 $name, 3, "NUKIBridge ($name) - Error: $err";
-    Log3 $name, 3, "NUKIBridge ($name) - JSON: $json";
+    Log3 $name, 3, "NUKIBridge ($name) - PATH: $param->{path}";
+    Log3 $name, 3, "NUKIBridge ($name) - httpheader: $param->{httpheader}";
+    
     
     
     
@@ -646,7 +646,6 @@ sub NUKIBridge_CallBlocking($$$) {
       url           => $url,
       timeout       => 3,
       method        => "GET",
-      noshutdown    => 1,
       header        => "Content-Type: application/json",
     });
 

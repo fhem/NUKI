@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.3.9";
+my $version = "0.3.11";
 
 
 
@@ -324,7 +324,7 @@ sub NUKIBridge_firstRun($) {
     RemoveInternalTimer($hash);
     
     NUKIBridge_Call($hash,$hash,"list",undef,undef) if( !IsDisabled($name) );
-    InternalTimer( gettimeofday()+3, "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
+    #InternalTimer( gettimeofday()+3, "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
     
     Log3 $name, 4, "NUKIBridge ($name) - Call NUKIBridge_Get" if( !IsDisabled($name) );
 

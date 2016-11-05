@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.3.7";
+my $version = "0.3.9";
 
 
 
@@ -374,6 +374,7 @@ sub NUKIBridge_Call($$$$$) {
 	    hash       => $hash,
 	    chash      => $chash,
 	    endpoint   => $path,
+	    header     => "agent: FHEM/1.0\r\nUser-Agent: FHEM/1.0\r\nAccept: application/json",
 	    method     => "GET",
 	    doTrigger  => 1,
 	    noshutdown => 1,

@@ -128,11 +128,11 @@ sub NUKIBridge_Define($$) {
     
     RemoveInternalTimer($hash);
     
-    if( $init_done ) {
-        NUKIBridge_firstRun($hash) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
-    } else {
-        InternalTimer( gettimeofday()+15, "NUKIBridge_firstRun", $hash, 0 ) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
-    }
+    #if( $init_done ) {
+    #    NUKIBridge_firstRun($hash) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
+    #} else {
+    #    InternalTimer( gettimeofday()+15, "NUKIBridge_firstRun", $hash, 0 ) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
+    #}
 
     $modules{NUKIBridge}{defptr}{$hash->{HOST}} = $hash;
     

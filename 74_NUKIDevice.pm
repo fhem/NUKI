@@ -337,8 +337,10 @@ sub NUKIDevice_Parse($$$) {
     my $battery;
     if( $decode_json->{batteryCritical} eq "false" ) {
         $battery = "ok";
-    } else {
+    } elsif ( $decode_json->{batteryCritical} eq "true" ) {
         $battery = "low";
+    } else {
+        $battery = "parseError";
     }
 
     if( defined($hash->{helper}{lockAction}) ) {

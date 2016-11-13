@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.3.11";
+my $version = "0.3.15";
 
 
 
@@ -128,11 +128,11 @@ sub NUKIBridge_Define($$) {
     
     RemoveInternalTimer($hash);
     
-    #if( $init_done ) {
-    #    NUKIBridge_firstRun($hash) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
-    #} else {
-    #    InternalTimer( gettimeofday()+15, "NUKIBridge_firstRun", $hash, 0 ) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
-    #}
+    if( $init_done ) {
+        NUKIBridge_firstRun($hash) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
+    } else {
+        InternalTimer( gettimeofday()+15, "NUKIBridge_firstRun", $hash, 0 ) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
+    }
 
     $modules{NUKIBridge}{defptr}{$hash->{HOST}} = $hash;
     
@@ -324,7 +324,7 @@ sub NUKIBridge_firstRun($) {
     RemoveInternalTimer($hash);
     
     NUKIBridge_Call($hash,$hash,"list",undef,undef) if( !IsDisabled($name) );
-    #InternalTimer( gettimeofday()+3, "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
+    InternalTimer( gettimeofday()+3, "NUKIBridge_GetCheckBridgeAlive", $hash, 0 );
     
     Log3 $name, 4, "NUKIBridge ($name) - Call NUKIBridge_Get" if( !IsDisabled($name) );
 
@@ -342,8 +342,8 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
 
         NUKIBridge_Call($hash,$hash,"info",undef,undef);
     
-        #InternalTimer( gettimeofday()+$hash->{INTERVAL}, "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
-        #Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
+        InternalTimer( gettimeofday()+$hash->{INTERVAL}, "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
+        Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
     }
     
     return 1;
@@ -370,7 +370,7 @@ sub NUKIBridge_Call($$$$$) {
     HttpUtils_NonblockingGet(
 	{
 	    url        => $uri,
-	    timeout    => 10,
+	    timeout    => 15,
 	    hash       => $hash,
 	    chash      => $chash,
 	    endpoint   => $path,

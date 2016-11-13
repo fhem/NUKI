@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.3.11";
+my $version = "0.3.15";
 
 
 
@@ -120,11 +120,11 @@ sub NUKIDevice_Define($$) {
     
     RemoveInternalTimer($hash);
     
-    #if( $init_done ) {
-    #    NUKIDevice_GetUpdateInternalTimer($hash);
-    #} else {
-    #    InternalTimer(gettimeofday()+20, "NUKIDevice_GetUpdateInternalTimer", $hash, 0);
-    #}
+    if( $init_done ) {
+        NUKIDevice_GetUpdateInternalTimer($hash);
+    } else {
+        InternalTimer(gettimeofday()+20, "NUKIDevice_GetUpdateInternalTimer", $hash, 0);
+    }
 
     return undef;
 }
@@ -253,12 +253,12 @@ sub NUKIDevice_GetUpdateInternalTimer($) {
     my $name = $hash->{NAME};
     
     
-    #NUKIDevice_GetUpdate($hash);
-    #Log3 $name, 5, "NUKIDevice ($name) - Call NUKIDevice_GetUpdate";
+    NUKIDevice_GetUpdate($hash);
+    Log3 $name, 5, "NUKIDevice ($name) - Call NUKIDevice_GetUpdate";
     
     RemoveInternalTimer($hash);
-    #InternalTimer(gettimeofday()+$hash->{INTERVAL}, "NUKIDevice_GetUpdateInternalTimer", $hash, 0) if( $hash->{INTERVAL} );
-    #Log3 $name, 5, "NUKIDevice ($name) - Call InternalTimer";
+    InternalTimer(gettimeofday()+$hash->{INTERVAL}, "NUKIDevice_GetUpdateInternalTimer", $hash, 1) if( $hash->{INTERVAL} );
+    Log3 $name, 5, "NUKIDevice ($name) - Call InternalTimer";
 }
 
 sub NUKIDevice_ReadFromNUKIBridge($@) {

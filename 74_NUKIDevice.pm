@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.3.15";
+my $version = "0.3.22";
 
 
 
@@ -49,7 +49,6 @@ sub NUKIDevice_Initialize($) {
     
     $hash->{AttrList} 	    = "IODev ".
                               "disable:1 ".
-                              "interval ".
                               $readingFnAttributes;
 
 
@@ -86,7 +85,6 @@ sub NUKIDevice_Define($$) {
     $hash->{NUKIID} 	= $nukiId;
     $hash->{VERSION} 	= $version;
     $hash->{STATE}      = 'Initialized';
-    $hash->{INTERVAL}   = 20;
     
     
     AssignIoPort($hash,$iodev) if( !$hash->{IODev} );
@@ -116,15 +114,6 @@ sub NUKIDevice_Define($$) {
     Log3 $name, 3, "NUKIDevice ($name) - defined with Code: $code";
 
     $attr{$name}{room} = "NUKI" if( !defined( $attr{$name}{room} ) );
-    
-    
-    RemoveInternalTimer($hash);
-    
-    if( $init_done ) {
-        NUKIDevice_GetUpdateInternalTimer($hash);
-    } else {
-        InternalTimer(gettimeofday()+20, "NUKIDevice_GetUpdateInternalTimer", $hash, 0);
-    }
 
     return undef;
 }
@@ -171,23 +160,6 @@ sub NUKIDevice_Attr(@) {
 	    InternalTimer( gettimeofday()+2, "NUKIDevice_GetUpdateInternalTimer", $hash, 0 );
 	    readingsSingleUpdate ( $hash, "state", "Initialized", 1 );
 	    Log3 $name, 3, "NUKIDevice ($name) - enabled";
-        }
-    }
-    
-    if( $attrName eq "interval" ) {
-	if( $cmd eq "set" ) {
-	    if( $attrVal < 10 ) {
-		Log3 $name, 3, "NUKIDevice ($name) - interval too small, please use something > 10 (sec), default is 20 (sec)";
-		return "interval too small, please use something > 10 (sec), default is 60 (sec)";
-	    } else {
-		$hash->{INTERVAL} = $attrVal;
-		Log3 $name, 3, "NUKIDevice ($name) - set interval to $attrVal";
-	    }
-	    
-	} else {
-	
-	    $hash->{INTERVAL} = 20;
-	    Log3 $name, 3, "NUKIDevice ($name) - set interval to default";
         }
     }
     
@@ -247,20 +219,6 @@ sub NUKIDevice_GetUpdate($) {
     return undef;
 }
 
-sub NUKIDevice_GetUpdateInternalTimer($) {
-
-    my ($hash) = @_;
-    my $name = $hash->{NAME};
-    
-    
-    NUKIDevice_GetUpdate($hash);
-    Log3 $name, 5, "NUKIDevice ($name) - Call NUKIDevice_GetUpdate";
-    
-    RemoveInternalTimer($hash);
-    InternalTimer(gettimeofday()+$hash->{INTERVAL}, "NUKIDevice_GetUpdateInternalTimer", $hash, 1) if( $hash->{INTERVAL} );
-    Log3 $name, 5, "NUKIDevice ($name) - Call InternalTimer";
-}
-
 sub NUKIDevice_ReadFromNUKIBridge($@) {
 
     my ($hash,@a) = @_;
@@ -291,9 +249,9 @@ sub NUKIDevice_ReadFromNUKIBridge($@) {
     return $ret;
 }
 
-sub NUKIDevice_Parse($$$) {
+sub NUKIDevice_Parse($$) {
 
-    my($hash,$result,$path) = @_;
+    my($hash,$result) = @_;
     my $name = $hash->{NAME};
 
 
@@ -317,8 +275,8 @@ sub NUKIDevice_Parse($$$) {
     
     #########################################
     #### verarbeiten des JSON Strings #######
-    
     my $decode_json = decode_json($result);
+    
     
     if( ref($decode_json) ne "HASH" ) {
         Log3 $name, 2, "$name: got wrong status message for $name: $decode_json";
@@ -326,6 +284,14 @@ sub NUKIDevice_Parse($$$) {
     }
 
     Log3 $name, 5, "parse status message for $name";
+    
+    NUKIDevice_WriteReadings($hash,$decode_json);
+}
+
+sub NUKIDevice_WriteReadings($$) {
+
+    my ($hash,$decode_json)     = @_;
+    my $name                    = $hash->{NAME};
     
     
     ############################
@@ -359,6 +325,7 @@ sub NUKIDevice_Parse($$$) {
         readingsBulkUpdate( $hash, "battery", $battery );
         
         delete $hash->{helper}{lockAction};
+        Log3 $name, 5, "readings set for $name";
     
     } else {
         
@@ -375,6 +342,10 @@ sub NUKIDevice_Parse($$$) {
     
     return undef;
 }
+
+
+
+
 
 
 
@@ -438,7 +409,6 @@ sub NUKIDevice_Parse($$$) {
   <b>Attributes</b>
   <ul>
     <li>disable - disables the Nuki device</li>
-    <li>interval - changes the interval for the statusRequest</li>
     <br>
   </ul>
 </ul>
@@ -494,7 +464,6 @@ sub NUKIDevice_Parse($$$) {
   <b>Attribute</b>
   <ul>
     <li>disable - deaktiviert das Nuki Device</li>
-    <li>interval - verändert den Interval für den statusRequest</li>
     <br>
   </ul>
 </ul>

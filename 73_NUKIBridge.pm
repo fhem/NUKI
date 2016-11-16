@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.3.15";
+my $version = "0.3.22";
 
 
 
@@ -77,8 +77,7 @@ sub NUKIBridge_Initialize($) {
     $hash->{DefFn}	= "NUKIBridge_Define";
     $hash->{UndefFn}	= "NUKIBridge_Undef";
     $hash->{AttrFn}	= "NUKIBridge_Attr";
-    $hash->{AttrList} 	= "interval ".
-                          "disable:1 ".
+    $hash->{AttrList} 	= "disable:1 ".
                           "webhookFWinstance:$webhookFWinstance ".
                           $readingFnAttributes;
 
@@ -111,12 +110,10 @@ sub NUKIBridge_Define($$) {
     my $host    	= $a[2];
     my $token           = $a[3];
     my $port		= 8080;
-    my $interval  	= 60;
 
     $hash->{HOST} 	= $host;
     $hash->{PORT} 	= $port;
     $hash->{TOKEN} 	= $token;
-    $hash->{INTERVAL} 	= $interval;
     $hash->{VERSION} 	= $version;
     
 
@@ -164,7 +161,7 @@ sub NUKIBridge_Attr(@) {
 	if( $cmd eq "set" ) {
 	    if( $attrVal eq "0" ) {
 		RemoveInternalTimer( $hash );
-		InternalTimer( gettimeofday()+2, "NUKIBridge_GetCheckBridgeAlive", $hash, 0 );
+		InternalTimer( gettimeofday()+2, "NUKIBridge_GetSmartlocksState", $hash, 0 );
 		readingsSingleUpdate($hash, 'state', 'Initialized', 1 );
 		Log3 $name, 3, "NUKIBridge ($name) - enabled";
 	    } else {
@@ -175,32 +172,10 @@ sub NUKIBridge_Attr(@) {
             
         } else {
 	    RemoveInternalTimer( $hash );
-	    InternalTimer( gettimeofday()+2, "NUKIBridge_GetCheckBridgeAlive", $hash, 0 );
+	    InternalTimer( gettimeofday()+2, "NUKIBridge_GetSmartlocksState", $hash, 0 );
 	    readingsSingleUpdate($hash, 'state', 'Initialized', 1 );
 	    Log3 $name, 3, "NUKIBridge ($name) - enabled";
         }
-    }
-    
-    if( $attrName eq "interval" ) {
-	if( $cmd eq "set" ) {
-	    if( $attrVal < 30 ) {
-		Log3 $name, 3, "NUKIBridge ($name) - interval too small, please use something > 30 (sec), default is 60 (sec)";
-		return "interval too small, please use something > 30 (sec), default is 60 (sec)";
-	    } else {
-		$hash->{INTERVAL} = $attrVal;
-		Log3 $name, 3, "NUKIBridge ($name) - set interval to $attrVal";
-	    }
-	}
-	elsif( $cmd eq "del" ) {
-	    $hash->{INTERVAL} = 60;
-	    Log3 $name, 3, "NUKIBridge ($name) - set interval to default";
-	
-	} else {
-	    if( $cmd eq "set" ) {
-		$attr{$name}{$attrName} = $attrVal;
-		Log3 $name, 3, "NUKIBridge ($name) - $attrName : $attrVal";
-	    }
-	}
     }
     
     # webhook*
@@ -266,7 +241,7 @@ sub NUKIBridge_Set($@) {
 
         return undef;
 
-    } elsif($cmd eq 'statusRequest') {
+    } elsif($cmd eq 'info') {
         return "usage: statusRequest" if( @args != 0 );
     
         NUKIBridge_Call($hash,$hash,"info",undef,undef) if( !IsDisabled($name) );
@@ -293,7 +268,7 @@ sub NUKIBridge_Set($@) {
         NUKIBridge_CallBlocking($hash,"clearlog",undef);
 
     } else {
-        my $list = "statusRequest:noArg autocreate:noArg clearLog:noArg fwUpdate:noArg reboot:noArg";
+        my $list = "info:noArg autocreate:noArg clearLog:noArg fwUpdate:noArg reboot:noArg";
         return "Unknown argument $cmd, choose one of $list";
     }
 
@@ -324,34 +299,13 @@ sub NUKIBridge_firstRun($) {
     RemoveInternalTimer($hash);
     
     NUKIBridge_Call($hash,$hash,"list",undef,undef) if( !IsDisabled($name) );
-    InternalTimer( gettimeofday()+3, "NUKIBridge_GetCheckBridgeAlive", $hash, 0 );
-    
-    Log3 $name, 4, "NUKIBridge ($name) - Call NUKIBridge_Get" if( !IsDisabled($name) );
 
-    return 1;
-}
-
-sub NUKIBridge_GetCheckBridgeAlive($) {
-
-    my ($hash) = @_;
-    my $name = $hash->{NAME};
-    
-    RemoveInternalTimer($hash);
-    
-    if( !IsDisabled($name) ) {
-
-        NUKIBridge_Call($hash,$hash,"info",undef,undef);
-    
-        InternalTimer( gettimeofday()+$hash->{INTERVAL}, "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
-        Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
-    }
-    
-    return 1;
+    return undef;
 }
 
 sub NUKIBridge_Call($$$$$) {
 
-    my ($hash,$chash,$path,$lockAction,$nukiId,) = @_;
+    my ($hash,$chash,$path,$lockAction,$nukiId) = @_;
     
     my $name    =   $hash->{NAME};
     my $host    =   $hash->{HOST};
@@ -369,14 +323,14 @@ sub NUKIBridge_Call($$$$$) {
 
     HttpUtils_NonblockingGet(
 	{
-	    url        => $uri,
-	    timeout    => 15,
-	    hash       => $hash,
-	    chash      => $chash,
-	    endpoint   => $path,
-	    header     => "Accept: application/json",
-	    method     => "GET",
-	    callback   => \&NUKIBridge_Distribution,
+	    url            => $uri,
+	    timeout        => 30,
+	    hash           => $hash,
+	    chash          => $chash,
+	    endpoint       => $path,
+	    header         => "Accept: application/json",
+	    method         => "GET",
+	    callback       => \&NUKIBridge_Distribution,
 	}
     );
     
@@ -386,19 +340,18 @@ sub NUKIBridge_Call($$$$$) {
 sub NUKIBridge_Distribution($$$) {
 
     my ( $param, $err, $json ) = @_;
-    my $hash = $param->{hash};
-    my $doTrigger = $param->{doTrigger};
-    my $name = $hash->{NAME};
-    my $host = $hash->{HOST};
-    
+    my $hash            = $param->{hash};
+    my $doTrigger       = $param->{doTrigger};
+    my $name            = $hash->{NAME};
+    my $host            = $hash->{HOST};
 
     
+
     Log3 $name, 3, "NUKIBridge ($name) - Param Alive: $param->{alive}";
     Log3 $name, 3, "NUKIBridge ($name) - Param Code: $param->{code}";
     Log3 $name, 3, "NUKIBridge ($name) - Error: $err";
     Log3 $name, 3, "NUKIBridge ($name) - PATH: $param->{path}";
     Log3 $name, 3, "NUKIBridge ($name) - httpheader: $param->{httpheader}";
-    
     
     
     
@@ -465,7 +418,7 @@ sub NUKIBridge_Distribution($$$) {
         
     } else {
     
-        NUKIDevice_Parse($param->{chash},$json,$param->{endpoint});
+        NUKIDevice_Parse($param->{chash},$json);
     }
     
     readingsEndUpdate( $hash, 1 );
@@ -644,7 +597,7 @@ sub NUKIBridge_CallBlocking($$$) {
     
     my($err,$data)  = HttpUtils_BlockingGet({
       url           => $url,
-      timeout       => 3,
+      timeout       => 5,
       method        => "GET",
       header        => "Content-Type: application/json",
     });
@@ -779,7 +732,6 @@ sub NUKIBridge_CGI() {
   <b>Attributes</b>
   <ul>
     <li>disable - disables the Nuki Bridge</li>
-    <li>interval - changes the interval for the CheckAlive</li>
     <br>
   </ul>
 </ul>
@@ -831,7 +783,6 @@ sub NUKIBridge_CGI() {
   <b>Attribute</b>
   <ul>
     <li>disable - deaktiviert die Nuki Bridge</li>
-    <li>interval - verändert den Interval für den CheckAlive</li>
     <br>
   </ul>
 </ul>

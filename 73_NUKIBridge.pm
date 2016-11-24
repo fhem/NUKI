@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.3.22";
+my $version = "0.3.25";
 
 
 
@@ -324,7 +324,7 @@ sub NUKIBridge_Call($$$$$) {
     HttpUtils_NonblockingGet(
 	{
 	    url            => $uri,
-	    timeout        => 30,
+	    timeout        => 60,
 	    hash           => $hash,
 	    chash          => $chash,
 	    endpoint       => $path,
@@ -597,7 +597,7 @@ sub NUKIBridge_CallBlocking($$$) {
     
     my($err,$data)  = HttpUtils_BlockingGet({
       url           => $url,
-      timeout       => 5,
+      timeout       => 15,
       method        => "GET",
       header        => "Content-Type: application/json",
     });

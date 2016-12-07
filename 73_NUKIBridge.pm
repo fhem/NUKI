@@ -527,15 +527,9 @@ sub NUKIBridge_InfoProcessing($$) {
     
     
     readingsBeginUpdate($hash);
-    
-    if( ref($decode_json->{versions}) eq "ARRAY" and scalar(@{$decode_json->{versions}}) > 0 ) {
-        foreach my $versions (@{$decode_json->{versions}}) {
-            readingsBulkUpdate($hash,"appVersion",$versions->{appVersion});
-            readingsBulkUpdate($hash,"firmwareVersion",$versions->{firmwareVersion});
-            readingsBulkUpdate($hash,"wifiFirmwareVersion",$versions->{wifiFirmwareVersion});
-        }
-    }
-    
+    readingsBulkUpdate($hash,"appVersion",$decode_json->{versions}->{appVersion});
+    readingsBulkUpdate($hash,"firmwareVersion",$decode_json->{versions}->{firmwareVersion});
+    readingsBulkUpdate($hash,"wifiFirmwareVersion",$decode_json->{versions}->{wifiFirmwareVersion});
     readingsBulkUpdate($hash,"bridgeType",$bridgeType{$decode_json->{bridgeType}});
     readingsBulkUpdate($hash,"hardwareId",$decode_json->{ids}{hardwareId});
     readingsBulkUpdate($hash,"serverId",$decode_json->{ids}{serverId});
@@ -597,7 +591,7 @@ sub NUKIBridge_CallBlocking($$$) {
     
     my($err,$data)  = HttpUtils_BlockingGet({
       url           => $url,
-      timeout       => 15,
+      timeout       => 5,
       method        => "GET",
       header        => "Content-Type: application/json",
     });

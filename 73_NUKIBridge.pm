@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.3.25";
+my $version = "0.3.30";
 
 
 
@@ -178,7 +178,8 @@ sub NUKIBridge_Attr(@) {
         }
     }
     
-    # webhook*
+    ######################
+    #### webhook #########
     if ( $attrName =~ /^webhook.*/ ) {
         my $webhookHttpHostname = (
               $attrName eq "webhookHttpHostname"
@@ -192,7 +193,7 @@ sub NUKIBridge_Attr(@) {
         );
         $hash->{WEBHOOK_URI} = "/"
           . AttrVal( $webhookFWinstance, "webname", "fhem" )
-          . "/THINKINGCLEANER";
+          . "/NUKISMARTLOCK";
         $hash->{WEBHOOK_PORT} = (
               $attrName eq "webhookPort"
             ? $attrVal
@@ -237,7 +238,7 @@ sub NUKIBridge_Set($@) {
     if($cmd eq 'autocreate') {
         return "usage: autocreate" if( @args != 0 );
 
-        NUKIBridge_firstRun($hash);
+        NUKIBridge_Call($hash,$hash,"list",undef,undef) if( !IsDisabled($name) );
 
         return undef;
 
@@ -291,14 +292,31 @@ sub NUKIBridge_Get($@) {
 
 }
 
-sub NUKIBridge_firstRun($) {
+sub NUKIBridge_GetCheckBridgeAlive($) {
 
     my ($hash) = @_;
     my $name = $hash->{NAME};
     
     RemoveInternalTimer($hash);
     
+    if( !IsDisabled($name) ) {
+
+        NUKIBridge_Call($hash,$hash,"alive",undef,undef);
+    
+        InternalTimer( gettimeofday()+17+int(rand(12)), "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
+        Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
+    }
+}
+
+sub NUKIBridge_firstRun($) {
+
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
+    
+    
+    RemoveInternalTimer($hash);
     NUKIBridge_Call($hash,$hash,"list",undef,undef) if( !IsDisabled($name) );
+    NUKIBridge_GetCheckBridgeAlive($hash);
 
     return undef;
 }
@@ -312,7 +330,7 @@ sub NUKIBridge_Call($$$$$) {
     my $port    =   $hash->{PORT};
     my $token   =   $hash->{TOKEN};
     
-    
+    return "Only single call to Bridge, please try again later" if( $hash->{helper}{BRIDGE_CALL} );
     
     my $uri = "http://" . $hash->{HOST} . ":" . $port;
     $uri .= "/" . $path if( defined $path);
@@ -320,11 +338,12 @@ sub NUKIBridge_Call($$$$$) {
     $uri .= "&action=" . $lockActions{$lockAction} if( defined($lockAction) );
     $uri .= "&nukiId=" . $nukiId if( defined($nukiId) );
 
+    $hash->{helper}{BRIDGE_CALL} = 1;
 
     HttpUtils_NonblockingGet(
 	{
 	    url            => $uri,
-	    timeout        => 60,
+	    timeout        => 30,
 	    hash           => $hash,
 	    chash          => $chash,
 	    endpoint       => $path,
@@ -344,34 +363,37 @@ sub NUKIBridge_Distribution($$$) {
     my $doTrigger       = $param->{doTrigger};
     my $name            = $hash->{NAME};
     my $host            = $hash->{HOST};
-
     
-
-    Log3 $name, 3, "NUKIBridge ($name) - Param Alive: $param->{alive}";
-    Log3 $name, 3, "NUKIBridge ($name) - Param Code: $param->{code}";
-    Log3 $name, 3, "NUKIBridge ($name) - Error: $err";
-    Log3 $name, 3, "NUKIBridge ($name) - PATH: $param->{path}";
-    Log3 $name, 3, "NUKIBridge ($name) - httpheader: $param->{httpheader}";
-    
-    
+    delete $hash->{helper}{BRIDGE_CALL};
     
     readingsBeginUpdate($hash);
     
     if( defined( $err ) ) {
 
 	if ( $err ne "" ) {
-	
-            readingsBulkUpdate( $hash, "lastError", $err );
-            Log3 $name, 4, "NUKIBridge ($name) - error while requesting: $err";
+            if ($param->{endpoint} eq "alive") {
+                readingsBulkUpdate( $hash, "state", "not connected");
+            }
+            
+            readingsBulkUpdate( $hash, "lastError", $err ) if( ReadingsVal($name,"state","not connected") eq "not connected" );
+            Log3 $name, 3, "NUKIBridge ($name) - error while requesting: $err";
             readingsEndUpdate( $hash, 1 );
             return $err;
 	}
     }
 
     if( $json eq "" and exists( $param->{code} ) && $param->{code} ne 200 ) {
+        if( $param->{endpoint} eq "alive") {
     
+            readingsBulkUpdate( $hash, "state", "connected" );
+            Log3 $name, 5, "NUKIBridge ($name) - Bridge ist online";
+            
+            readingsEndUpdate( $hash, 1 );
+            return;
+        }
+        
         readingsBulkUpdate( $hash, "lastError", "Internal error, " .$param->{code} );
-	Log3 $name, 4, "NUKIBridge ($name) - received http code " .$param->{code}." without any data after requesting";
+	Log3 $name, 3, "NUKIBridge ($name) - received http code " .$param->{code}." without any data after requesting";
 
 	readingsEndUpdate( $hash, 1 );
 	return "received http code ".$param->{code}." without any data after requesting";
@@ -384,13 +406,13 @@ sub NUKIBridge_Distribution($$$) {
         
         
         ###### Fehler bei Antwort auf Anfrage eines logischen Devices ######
-        NUKIDevice_Parse($param->{chash},$param->{code},undef) if( $param->{code} eq 404 );
-        NUKIDevice_Parse($param->{chash},$param->{code},undef) if( $param->{code} eq 400 and $hash != $param->{chash} );       
+        NUKIDevice_Parse($param->{chash},$param->{code}) if( $param->{code} eq 404 );
+        NUKIDevice_Parse($param->{chash},$param->{code}) if( $param->{code} eq 400 and $hash != $param->{chash} );       
         
         
-	Log3 $name, 4, "NUKIBridge ($name) - invalid API token" if( $param->{code} eq 401 );
-	Log3 $name, 4, "NUKIBridge ($name) - nukiId is not known" if( $param->{code} eq 404 );
-	Log3 $name, 4, "NUKIBridge ($name) - action is undefined" if( $param->{code} eq 400 and $hash == $param->{chash} );
+	Log3 $name, 3, "NUKIBridge ($name) - invalid API token" if( $param->{code} eq 401 );
+	Log3 $name, 3, "NUKIBridge ($name) - nukiId is not known" if( $param->{code} eq 404 );
+	Log3 $name, 3, "NUKIBridge ($name) - action is undefined" if( $param->{code} eq 400 and $hash == $param->{chash} );
 	
 	
 	######### Zum testen da ich kein Nuki Smartlock habe ############
@@ -437,6 +459,7 @@ sub NUKIBridge_ResponseProcessing($$$) {
     if( ref($decode_json) eq "ARRAY" and scalar(@{$decode_json}) > 0 and $path eq "list" ) {
 
         NUKIBridge_Autocreate($hash,$decode_json);
+        NUKIBridge_Call($hash,$hash,"info",undef,undef) if( !IsDisabled($name) );
     }
     
     elsif( $path eq "info" ) {
@@ -477,17 +500,17 @@ sub NUKIBridge_Autocreate($$;$) {
         
         my $code = $name ."-".$nukiId;
         if( defined($modules{NUKIDevice}{defptr}{$code}) ) {
-            Log3 $name, 5, "NUKIDevice ($name) - NukiId '$nukiId' already defined as '$modules{NUKIDevice}{defptr}{$code}->{NAME}'";
+            Log3 $name, 3, "NUKIDevice ($name) - NukiId '$nukiId' already defined as '$modules{NUKIDevice}{defptr}{$code}->{NAME}'";
             next;
         }
         
         my $devname = "NUKIDevice" . $nukiId;
         my $define= "$devname NUKIDevice $nukiId IODev=$name";
-        Log3 $name, 5, "NUKIDevice ($name) - create new device '$devname' for address '$nukiId'";
+        Log3 $name, 3, "NUKIDevice ($name) - create new device '$devname' for address '$nukiId'";
 
         my $cmdret= CommandDefine(undef,$define);
         if($cmdret) {
-            Log3 $name, 1, "NUKIDevice ($name) - Autocreate: An error occurred while creating device for nukiId '$nukiId': $cmdret";
+            Log3 $name, 3, "NUKIDevice ($name) - Autocreate: An error occurred while creating device for nukiId '$nukiId': $cmdret";
         } else {
             $cmdret= CommandAttr(undef,"$devname alias $nukiName");
             $cmdret= CommandAttr(undef,"$devname room NUKI");
@@ -547,11 +570,11 @@ sub NUKIBridge_getLogfile($) {
     
     my $decode_json = NUKIBridge_CallBlocking($hash,"log",undef);
     
-    Log3 $name, 3, "NUKIBridge ($name) - Kurz vor der Bedingung nach decode_json ARRAY";
-
+    Log3 $name, 4, "NUKIBridge ($name) - Log Daten werden geholt und aufbereitet";
+    
     
     if( ref($decode_json) eq "ARRAY" and scalar(@{$decode_json}) > 0 ) {
-        Log3 $name, 3, "NUKIBridge ($name) - Innerhalb der ARRAY Bedingung";
+        Log3 $name, 4, "NUKIBridge ($name) - Tabelle mit Logdaten wird aufgebaut";
     
         my $ret = '<html><table width=100%><tr><td>';
 
@@ -559,12 +582,14 @@ sub NUKIBridge_getLogfile($) {
 
             $ret .= '<tr class="odd">';
             $ret .= "<td><b>Timestamp</b></td>";
+            $ret .= "<td>   </td>";
             $ret .= "<td><b>Type</b></td>";
             $ret .= '</tr>';
     
         foreach my $logs (@{$decode_json}) {
         
             $ret .= "<td>$logs->{timestamp}</td>";
+            $ret .= "<td>   </td>";
             $ret .= "<td>$logs->{type}</td>";
             $ret .= '</tr>';
         }
@@ -584,17 +609,22 @@ sub NUKIBridge_CallBlocking($$$) {
     my $port    = $hash->{PORT};
     my $token   = $hash->{TOKEN};
     
+    return "Only single call to Bridge, please try again later" if( $hash->{helper}{BRIDGE_CALL} );
+    
     my $url = "http://" . $hash->{HOST} . ":" . $port;
     $url .= "/" . $path if( defined $path);
     $url .= "?token=" . $token if( defined($token) );
     
+    $hash->{helper}{BRIDGE_CALL} = 1;
     
     my($err,$data)  = HttpUtils_BlockingGet({
       url           => $url,
-      timeout       => 5,
+      timeout       => 3,
       method        => "GET",
       header        => "Content-Type: application/json",
     });
+    
+    delete $hash->{helper}{BRIDGE_CALL};
 
     if( !$data ) {
       Log3 $name, 3, "NUKIDevice ($name) - empty answer received for $url";
@@ -602,9 +632,9 @@ sub NUKIBridge_CallBlocking($$$) {
     } elsif( $data =~ m'HTTP/1.1 200 OK' ) {
       Log3 $name, 4, "NUKIDevice ($name) - empty answer received for $url";
       return undef;
-    } elsif( $data !~ m/^[\[{].*[\]}]$/ ) {
-      Log3 $name, 3, "NUKIDevice ($name) - invalid json detected for $url: $data";
-      return undef;
+    #} elsif( $data !~ m/^[\[{].*[}\]]$/ ) {
+    #  Log3 $name, 3, "NUKIDevice ($name) - invalid json detected for $url: $data";
+    #  return "NUKIDevice ($name) - invalid json detected for $url: $data";
     }
 
     
@@ -612,7 +642,7 @@ sub NUKIBridge_CallBlocking($$$) {
 
     return undef if( !$decode_json );
     
-    Log3 $name, 3, "NUKIBridge ($name) - Blocking HTTP Abfrage beendet";
+    Log3 $name, 4, "NUKIBridge ($name) - Blocking HTTP Abfrage beendet";
     return ($decode_json);
 }
 

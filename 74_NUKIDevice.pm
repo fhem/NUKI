@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.3.25";
+my $version = "0.3.30";
 
 
 
@@ -114,6 +114,12 @@ sub NUKIDevice_Define($$) {
     Log3 $name, 3, "NUKIDevice ($name) - defined with Code: $code";
 
     $attr{$name}{room} = "NUKI" if( !defined( $attr{$name}{room} ) );
+    
+    if( $init_done ) {
+        InternalTimer( gettimeofday()+int(rand(5)), "NUKIDevice_GetUpdateTimer", $hash, 0 );
+    } else {
+        InternalTimer( gettimeofday()+15+int(rand(5)), "NUKIDevice_GetUpdateTimer", $hash, 0 );
+    }
 
     return undef;
 }
@@ -131,7 +137,7 @@ sub NUKIDevice_Undef($$) {
     my $code = $hash->{NUKIID};
     $code = $hash->{IODev}->{NAME} ."-". $code if( defined($hash->{IODev}->{NAME}) );
     Log3 $name, 3, "NUKIDevice ($name) - undefined with Code: $code";
-    delete($modules{HUEDevice}{defptr}{$code});
+    delete($modules{NUKIDevice}{defptr}{$code});
 
     return undef;
 }
@@ -207,14 +213,31 @@ sub NUKIDevice_Set($$@) {
     return undef;
 }
 
+sub NUKIDevice_GetUpdateTimer($) {
+
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
+    
+    
+    RemoveInternalTimer($hash);
+    
+    if( !IsDisabled($name) ) {
+        NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
+        Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call NUKIDevice_ReadFromNUKIBridge";
+        InternalTimer( gettimeofday()+12+int(rand(12)), "NUKIDevice_GetUpdateTimer", $hash, 1 );
+    }
+
+    return undef;
+}
+
 sub NUKIDevice_GetUpdate($) {
 
     my ($hash) = @_;
     my $name = $hash->{NAME};
     
     
-    NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
-    Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call NUKIDevice_ReadFromNUKIBridge";
+    NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} ) if( !IsDisabled($name) );
+    Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call NUKIDevice_ReadFromNUKIBridge" if( !IsDisabled($name) );
 
     return undef;
 }
@@ -223,6 +246,9 @@ sub NUKIDevice_ReadFromNUKIBridge($@) {
 
     my ($hash,@a) = @_;
     my $name = $hash->{NAME};
+    
+    return "IODev $hash->{IODev} is not connected" if( ReadingsVal($hash->{IODev},"state","not connected") eq "not connected" );
+    
     
     no strict "refs";
     my $ret;

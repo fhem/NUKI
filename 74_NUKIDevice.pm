@@ -224,7 +224,7 @@ sub NUKIDevice_GetUpdateTimer($) {
     if( !IsDisabled($name) ) {
         NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
         Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call NUKIDevice_ReadFromNUKIBridge";
-        InternalTimer( gettimeofday()+12+int(rand(12)), "NUKIDevice_GetUpdateTimer", $hash, 1 );
+        InternalTimer( gettimeofday()+12+int(rand(18)), "NUKIDevice_GetUpdateTimer", $hash, 1 );
     }
 
     return undef;

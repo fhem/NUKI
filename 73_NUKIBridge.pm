@@ -303,7 +303,7 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
 
         NUKIBridge_Call($hash,$hash,"alive",undef,undef);
     
-        InternalTimer( gettimeofday()+17+int(rand(12)), "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
+        InternalTimer( gettimeofday()+27+int(rand(13)), "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
         Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
     }
 }
@@ -376,7 +376,7 @@ sub NUKIBridge_Distribution($$$) {
             }
             
             readingsBulkUpdate( $hash, "lastError", $err ) if( ReadingsVal($name,"state","not connected") eq "not connected" );
-            Log3 $name, 3, "NUKIBridge ($name) - error while requesting: $err";
+            Log3 $name, 4, "NUKIBridge ($name) - error while requesting: $err";
             readingsEndUpdate( $hash, 1 );
             return $err;
 	}
@@ -393,7 +393,7 @@ sub NUKIBridge_Distribution($$$) {
         }
         
         readingsBulkUpdate( $hash, "lastError", "Internal error, " .$param->{code} );
-	Log3 $name, 3, "NUKIBridge ($name) - received http code " .$param->{code}." without any data after requesting";
+	Log3 $name, 4, "NUKIBridge ($name) - received http code " .$param->{code}." without any data after requesting";
 
 	readingsEndUpdate( $hash, 1 );
 	return "received http code ".$param->{code}." without any data after requesting";
@@ -410,9 +410,9 @@ sub NUKIBridge_Distribution($$$) {
         NUKIDevice_Parse($param->{chash},$param->{code}) if( $param->{code} eq 400 and $hash != $param->{chash} );       
         
         
-	Log3 $name, 3, "NUKIBridge ($name) - invalid API token" if( $param->{code} eq 401 );
-	Log3 $name, 3, "NUKIBridge ($name) - nukiId is not known" if( $param->{code} eq 404 );
-	Log3 $name, 3, "NUKIBridge ($name) - action is undefined" if( $param->{code} eq 400 and $hash == $param->{chash} );
+	Log3 $name, 4, "NUKIBridge ($name) - invalid API token" if( $param->{code} eq 401 );
+	Log3 $name, 4, "NUKIBridge ($name) - nukiId is not known" if( $param->{code} eq 404 );
+	Log3 $name, 4, "NUKIBridge ($name) - action is undefined" if( $param->{code} eq 400 and $hash == $param->{chash} );
 	
 	
 	######### Zum testen da ich kein Nuki Smartlock habe ############

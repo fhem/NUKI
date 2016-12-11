@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.3.30";
+my $version = "0.3.31";
 
 
 
@@ -223,7 +223,7 @@ sub NUKIDevice_GetUpdateTimer($) {
     
     if( !IsDisabled($name) ) {
         NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
-        Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call NUKIDevice_ReadFromNUKIBridge";
+        Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdateTimer Call NUKIDevice_ReadFromNUKIBridge";
         InternalTimer( gettimeofday()+12+int(rand(18)), "NUKIDevice_GetUpdateTimer", $hash, 1 );
     }
 
@@ -247,12 +247,15 @@ sub NUKIDevice_ReadFromNUKIBridge($@) {
     my ($hash,@a) = @_;
     my $name = $hash->{NAME};
     
-    return "IODev $hash->{IODev} is not connected" if( ReadingsVal($hash->{IODev},"state","not connected") eq "not connected" );
+    Log3 $name, 4, "NUKIDevice ($name) - NUKIDevice_ReadFromNUKIBridge check Bridge connected";
+    return "IODev $hash->{IODev} is not connected" if( ReadingsVal($hash->{IODev}->{NAME},"state","not connected") eq "not connected" );
     
     
     no strict "refs";
     my $ret;
     unshift(@a,$name);
+    
+    Log3 $name, 4, "NUKIDevice ($name) - NUKIDevice_ReadFromNUKIBridge Bridge is connected call IOWrite";
     
     $ret = IOWrite($hash,$hash,@a);
     use strict "refs";

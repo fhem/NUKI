@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.3.30";
+my $version = "0.3.31";
 
 
 

@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.3.31";
+my $version = "0.3.36";
 
 
 
@@ -68,8 +68,6 @@ sub NUKIBridge_Initialize($) {
     $hash->{WriteFn}    = "NUKIBridge_Read";
     $hash->{Clients}    = ":NUKIDevice:";
 
-    
-    my $webhookFWinstance = join( ",", devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
       
     # Consumer
     $hash->{SetFn}      = "NUKIBridge_Set";
@@ -78,7 +76,6 @@ sub NUKIBridge_Initialize($) {
     $hash->{UndefFn}	= "NUKIBridge_Undef";
     $hash->{AttrFn}	= "NUKIBridge_Attr";
     $hash->{AttrList} 	= "disable:1 ".
-                          "webhookFWinstance:$webhookFWinstance ".
                           $readingFnAttributes;
 
 
@@ -157,75 +154,31 @@ sub NUKIBridge_Attr(@) {
     
     my $orig = $attrVal;
 
+    
     if( $attrName eq "disable" ) {
+        if( $cmd eq "set" and $attrVal eq "1" ) {
+	    readingsSingleUpdate ( $hash, "state", "disabled", 1 );
+            Log3 $name, 3, "NUKIBridge ($name) - disabled";
+	}
+	
+	elsif( $cmd eq "del" ) {
+            readingsSingleUpdate ( $hash, "state", "active", 1 );
+            Log3 $name, 3, "NUKIBridge ($name) - enabled";
+        }
+    }
+    
+    if( $attrName eq "disabledForIntervals" ) {
 	if( $cmd eq "set" ) {
-	    if( $attrVal eq "0" ) {
-		RemoveInternalTimer( $hash );
-		InternalTimer( gettimeofday()+2, "NUKIBridge_GetSmartlocksState", $hash, 0 );
-		readingsSingleUpdate($hash, 'state', 'Initialized', 1 );
-		Log3 $name, 3, "NUKIBridge ($name) - enabled";
-	    } else {
-		RemoveInternalTimer( $hash );
-		readingsSingleUpdate($hash, 'state', 'disabled', 1 );
-		Log3 $name, 3, "NUKIBridge ($name) - disabled";
-            }
-            
-        } else {
-	    RemoveInternalTimer( $hash );
-	    InternalTimer( gettimeofday()+2, "NUKIBridge_GetSmartlocksState", $hash, 0 );
-	    readingsSingleUpdate($hash, 'state', 'Initialized', 1 );
-	    Log3 $name, 3, "NUKIBridge ($name) - enabled";
+            Log3 $name, 3, "NUKIBridge ($name) - enable disabledForIntervals";
+            readingsSingleUpdate ( $hash, "state", "Unknown", 1 );
+	}
+	
+	elsif( $cmd eq "del" ) {
+            readingsSingleUpdate ( $hash, "state", "active", 1 );
+            Log3 $name, 3, "NUKIBridge ($name) - delete disabledForIntervals";
         }
     }
-    
-    ######################
-    #### webhook #########
-    if ( $attrName =~ /^webhook.*/ ) {
-        my $webhookHttpHostname = (
-              $attrName eq "webhookHttpHostname"
-            ? $attrVal
-            : AttrVal( $name, "webhookHttpHostname", "" )
-        );
-        my $webhookFWinstance = (
-              $attrName eq "webhookFWinstance"
-            ? $attrVal
-            : AttrVal( $name, "webhookFWinstance", "" )
-        );
-        $hash->{WEBHOOK_URI} = "/"
-          . AttrVal( $webhookFWinstance, "webname", "fhem" )
-          . "/NUKISMARTLOCK";
-        $hash->{WEBHOOK_PORT} = (
-              $attrName eq "webhookPort"
-            ? $attrVal
-            : AttrVal(
-                $name, "webhookPort",
-                InternalVal( $webhookFWinstance, "PORT", "" )
-            )
-        );
 
-        $hash->{WEBHOOK_URL}     = "";
-        $hash->{WEBHOOK_COUNTER} = "0";
-        if ( $webhookHttpHostname ne "" && $hash->{WEBHOOK_PORT} ne "" ) {
-            $hash->{WEBHOOK_URL} =
-                "http://"
-              . $webhookHttpHostname . ":"
-              . $hash->{WEBHOOK_PORT}
-              . $hash->{WEBHOOK_URI};
-
-            my $cmd =
-                "&h_url=$webhookHttpHostname&h_path="
-              . $hash->{WEBHOOK_URI}
-              . "&h_port="
-              . $hash->{WEBHOOK_PORT};
-
-            NUKIBridge_CallBlocking( $hash, "register_webhook.json", $cmd );
-            $hash->{WEBHOOK_REGISTER} = "sent";
-        }
-        else {
-            $hash->{WEBHOOK_REGISTER} = "incomplete_attributes";
-        }
-    }
-    
     return undef;
 }
 
@@ -267,9 +220,20 @@ sub NUKIBridge_Set($@) {
         return "usage: clearLog" if( @args != 0 );
         
         NUKIBridge_CallBlocking($hash,"clearlog",undef);
+        
+    } elsif($cmd eq 'callbackRemove') {
+        return "usage: callbackRemove" if( @args != 1 );
+        my $id = "id=" . join( " ", @args );
+        
+        my $resp = NUKIBridge_CallBlocking($hash,"callback/remove",$id);
+        if( $resp->{success} eq "true" ) {
+            return "Success Callback $id removed";
+        } else {
+            return "remove Callback failed";
+        }
 
     } else {
-        my $list = "info:noArg autocreate:noArg clearLog:noArg fwUpdate:noArg reboot:noArg";
+        my $list = "info:noArg autocreate:noArg clearLog:noArg fwUpdate:noArg reboot:noArg callbackRemove:0,1,2";
         return "Unknown argument $cmd, choose one of $list";
     }
 
@@ -285,8 +249,13 @@ sub NUKIBridge_Get($@) {
 
         NUKIBridge_getLogfile($hash);
         
+    } elsif($cmd eq 'callbackList') {
+        return "usage: callbackList" if( @args != 0 );
+
+        NUKIBridge_getCallbackList($hash);
+        
     } else {
-        my $list = "logFile:noArg";
+        my $list = "logFile:noArg callbackList:noArg";
         return "Unknown argument $cmd, choose one of $list";
     }
 
@@ -303,7 +272,7 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
 
         NUKIBridge_Call($hash,$hash,"alive",undef,undef);
     
-        InternalTimer( gettimeofday()+27+int(rand(13)), "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
+        InternalTimer( gettimeofday()+30+int(rand(13)), "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
         Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
     }
 }
@@ -335,7 +304,8 @@ sub NUKIBridge_Call($$$$$) {
     my $uri = "http://" . $hash->{HOST} . ":" . $port;
     $uri .= "/" . $path if( defined $path);
     $uri .= "?token=" . $token if( defined($token) );
-    $uri .= "&action=" . $lockActions{$lockAction} if( defined($lockAction) );
+    $uri .= "&action=" . $lockActions{$lockAction} if( defined($lockAction) and $path ne "callback/add" );
+    $uri .= "&url=" . $lockAction if( defined($lockAction) and $path eq "callback/add" );
     $uri .= "&nukiId=" . $nukiId if( defined($nukiId) );
 
     $hash->{helper}{BRIDGE_CALL} = 1;
@@ -582,14 +552,14 @@ sub NUKIBridge_getLogfile($) {
 
             $ret .= '<tr class="odd">';
             $ret .= "<td><b>Timestamp</b></td>";
-            $ret .= "<td>   </td>";
+            $ret .= "<td> </td>";
             $ret .= "<td><b>Type</b></td>";
             $ret .= '</tr>';
     
         foreach my $logs (@{$decode_json}) {
         
             $ret .= "<td>$logs->{timestamp}</td>";
-            $ret .= "<td>   </td>";
+            $ret .= "<td> </td>";
             $ret .= "<td>$logs->{type}</td>";
             $ret .= '</tr>';
         }
@@ -599,6 +569,46 @@ sub NUKIBridge_getLogfile($) {
      
         return $ret;
     }
+}
+
+sub NUKIBridge_getCallbackList($) {
+
+    my ($hash)  = @_;
+    my $name    = $hash->{NAME};
+
+    
+    my $decode_json = NUKIBridge_CallBlocking($hash,"callback/list",undef);
+    
+    Log3 $name, 4, "NUKIBridge ($name) - Callback Daten werden geholt und aufbereitet";
+    
+    if( ref($decode_json->{callbacks}) eq "ARRAY" and scalar(@{$decode_json->{callbacks}}) > 0 ) {
+        Log3 $name, 4, "NUKIBridge ($name) - Tabelle mit Logdaten wird aufgebaut";
+    
+        my $ret = '<html><table width=100%><tr><td>';
+
+        $ret .= '<table class="block wide">';
+
+            $ret .= '<tr class="odd">';
+            $ret .= "<td><b>Callback-ID</b></td>";
+            $ret .= "<td> </td>";
+            $ret .= "<td><b>Callback-URL</b></td>";
+            $ret .= '</tr>';
+    
+        foreach my $cb (@{$decode_json->{callbacks}}) {
+        
+            $ret .= "<td>$cb->{id}</td>";
+            $ret .= "<td> </td>";
+            $ret .= "<td>$cb->{url}</td>";
+            $ret .= '</tr>';
+        }
+    
+        $ret .= '</table></td></tr>';
+        $ret .= '</table></html>';
+     
+        return $ret;
+    }
+    
+    return "Keine Callback Daten vorhanden oder Fehler bei der Verarbeitung";
 }
 
 sub NUKIBridge_CallBlocking($$$) {
@@ -614,6 +624,7 @@ sub NUKIBridge_CallBlocking($$$) {
     my $url = "http://" . $hash->{HOST} . ":" . $port;
     $url .= "/" . $path if( defined $path);
     $url .= "?token=" . $token if( defined($token) );
+    $url .= "&" . $obj if( defined($obj) );
     
     $hash->{helper}{BRIDGE_CALL} = 1;
     
@@ -627,75 +638,25 @@ sub NUKIBridge_CallBlocking($$$) {
     delete $hash->{helper}{BRIDGE_CALL};
 
     if( !$data ) {
-      Log3 $name, 3, "NUKIDevice ($name) - empty answer received for $url";
-      return undef;
+        Log3 $name, 3, "NUKIDevice ($name) - empty answer received for $url";
+        return undef;
     } elsif( $data =~ m'HTTP/1.1 200 OK' ) {
-      Log3 $name, 4, "NUKIDevice ($name) - empty answer received for $url";
-      return undef;
-    #} elsif( $data !~ m/^[\[{].*[}\]]$/ ) {
-    #  Log3 $name, 3, "NUKIDevice ($name) - invalid json detected for $url: $data";
-    #  return "NUKIDevice ($name) - invalid json detected for $url: $data";
+        Log3 $name, 4, "NUKIDevice ($name) - empty answer received for $url";
+        return undef;
+    } elsif( $data !~ m/^[\[{].*[}\]]$/ and $path ne "log" ) {
+        Log3 $name, 3, "NUKIDevice ($name) - invalid json detected for $url: $data";
+        return "NUKIDevice ($name) - invalid json detected for $url: $data";
     }
 
     
     my $decode_json = decode_json($data);
-
+    
     return undef if( !$decode_json );
     
+    Log3 $name, 5, "NUKIBridge ($name) - Data: $data";
     Log3 $name, 4, "NUKIBridge ($name) - Blocking HTTP Abfrage beendet";
     return ($decode_json);
 }
-
-sub NUKIBridge_CGI() {
-    my ($request) = @_;
-
-    # data received
-    if ( defined( $FW_httpheader{UUID} ) ) {
-        if ( defined( $modules{NUKIDevice}{defptr} ) ) {
-            while ( my ( $key, $value ) =
-                each %{ $modules{NUKIDevice}{defptr} } )
-            {
-
-                my $uuid = ReadingsVal( $key, "uuid", undef );
-                next if ( !$uuid || $uuid ne $FW_httpheader{UUID} );
-
-                $defs{$key}{WEBHOOK_COUNTER}++;
-                $defs{$key}{WEBHOOK_LAST} = TimeNow();
-
-                Log3 $key, 4,
-"THINKINGCLEANER $key: Received webhook for matching UUID at device $key";
-
-                my $delay = undef;
-
-# we need some delay as to the Robo seems to send webhooks but it's status does
-# not really reflect the change we'd expect to get here already so give 'em some
-# more time to think about it...
-                $delay = "2"
-                  if ( defined( $defs{$key}{LAST_COMMAND} )
-                    && time() - time_str2num( $defs{$key}{LAST_COMMAND} ) < 3 );
-
-                #THINKINGCLEANER_GetStatus( $defs{$key}, $delay );
-                last;
-            }
-        }
-
-        return ( undef, undef );
-    }
-
-    # no data received
-    else {
-        Log3 undef, 5, "THINKINGCLEANER: received malformed request\n$request";
-    }
-
-    return ( "text/plain; charset=utf-8", "Call failure: " . $request );
-}
-
-
-
-
-
-
-
 
 
 

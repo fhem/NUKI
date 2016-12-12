@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.3.31";
+my $version = "0.3.36";
 
 
 
@@ -47,8 +47,13 @@ sub NUKIDevice_Initialize($) {
     $hash->{UndefFn}	    = "NUKIDevice_Undef";
     $hash->{AttrFn}	    = "NUKIDevice_Attr";
     
+    my $webhookFWinstance = join( ",", devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
+    
     $hash->{AttrList} 	    = "IODev ".
                               "disable:1 ".
+                              "webhookFWinstance:$webhookFWinstance ".
+                              "webhookHttpHostname ".
+                              "webhookPort ".
                               $readingFnAttributes;
 
 
@@ -116,9 +121,9 @@ sub NUKIDevice_Define($$) {
     $attr{$name}{room} = "NUKI" if( !defined( $attr{$name}{room} ) );
     
     if( $init_done ) {
-        InternalTimer( gettimeofday()+int(rand(5)), "NUKIDevice_GetUpdateTimer", $hash, 0 );
+        InternalTimer( gettimeofday()+int(rand(10)), "NUKIDevice_GetUpdate", $hash, 0 );
     } else {
-        InternalTimer( gettimeofday()+15+int(rand(5)), "NUKIDevice_GetUpdateTimer", $hash, 0 );
+        InternalTimer( gettimeofday()+15+int(rand(5)), "NUKIDevice_GetUpdate", $hash, 0 );
     }
 
     return undef;
@@ -146,6 +151,7 @@ sub NUKIDevice_Attr(@) {
 
     my ( $cmd, $name, $attrName, $attrVal ) = @_;
     my $hash = $defs{$name};
+    my $token = $hash->{IODev}->{TOKEN};
 
     if( $attrName eq "disable" ) {
 	if( $cmd eq "set" ) {
@@ -166,6 +172,45 @@ sub NUKIDevice_Attr(@) {
 	    InternalTimer( gettimeofday()+2, "NUKIDevice_GetUpdateInternalTimer", $hash, 0 );
 	    readingsSingleUpdate ( $hash, "state", "Initialized", 1 );
 	    Log3 $name, 3, "NUKIDevice ($name) - enabled";
+        }
+    }
+    
+    ######################
+    #### webhook #########
+    
+    return "Invalid value for attribute $attrName: can only by FQDN or IPv4 or IPv6 address" if ( $attrVal && $attrName eq "webhookHttpHostname" && $attrVal !~ /^([A-Za-z_.0-9]+\.[A-Za-z_.0-9]+)|[0-9:]+$/ );
+
+    return "Invalid value for attribute $attrName: needs to be different from the defined name/address of your Smartlock, we need to know how Smartlock can connect back to FHEM here!" if ( $attrVal && $attrName eq "webhookHttpHostname" && $attrVal eq $hash->{DeviceName} );
+
+    return "Invalid value for attribute $attrName: FHEMWEB instance $attrVal not existing" if ( $attrVal && $attrName eq "webhookFWinstance" && ( !defined( $defs{$attrVal} ) || $defs{$attrVal}{TYPE} ne "FHEMWEB" ) );
+
+    return "Invalid value for attribute $attrName: needs to be an integer value" if ( $attrVal && $attrName eq "webhookPort" && $attrVal !~ /^\d+$/ );
+    
+    
+    
+    
+    if ( $attrName =~ /^webhook.*/ ) {
+    
+        my $webhookHttpHostname = ( $attrName eq "webhookHttpHostname" ? $attrVal : AttrVal( $name, "webhookHttpHostname", "" ) );
+        my $webhookFWinstance = ( $attrName eq "webhookFWinstance" ? $attrVal : AttrVal( $name, "webhookFWinstance", "" ) );
+        
+        $hash->{WEBHOOK_URI} = "%2F" . AttrVal( $webhookFWinstance, "webname", "fhem" ) . "%2FNUKIDevice";
+        $hash->{WEBHOOK_PORT} = ( $attrName eq "webhookPort" ? $attrVal : AttrVal( $name, "webhookPort", InternalVal( $webhookFWinstance, "PORT", "" )) );
+
+        $hash->{WEBHOOK_URL}     = "";
+        $hash->{WEBHOOK_COUNTER} = "0";
+        
+        if ( $webhookHttpHostname ne "" && $hash->{WEBHOOK_PORT} ne "" ) {
+        
+            $hash->{WEBHOOK_URL} = "http://" . $webhookHttpHostname . ":" . $hash->{WEBHOOK_PORT} . $hash->{WEBHOOK_URI};
+            my $url = "http%3A%2F%2F$webhookHttpHostname" . "%3A" . $hash->{WEBHOOK_PORT} . $hash->{WEBHOOK_URI} . "-" . $hash->{NUKIID};
+
+            Log3 $name, 3, "NUKIDevice ($name) - URL ist: $url";
+            NUKIDevice_ReadFromNUKIBridge($hash,"callback/add",$url,undef ) if( $init_done );
+            $hash->{WEBHOOK_REGISTER} = "sent";
+            
+        } else {
+            $hash->{WEBHOOK_REGISTER} = "incomplete_attributes";
         }
     }
     
@@ -235,6 +280,7 @@ sub NUKIDevice_GetUpdate($) {
     my ($hash) = @_;
     my $name = $hash->{NAME};
     
+    RemoveInternalTimer($hash);
     
     NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} ) if( !IsDisabled($name) );
     Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call NUKIDevice_ReadFromNUKIBridge" if( !IsDisabled($name) );
@@ -308,11 +354,11 @@ sub NUKIDevice_Parse($$) {
     
     
     if( ref($decode_json) ne "HASH" ) {
-        Log3 $name, 2, "$name: got wrong status message for $name: $decode_json";
+        Log3 $name, 2, "NUKIDevice ($name) - got wrong status message for $name: $decode_json";
         return undef;
     }
 
-    Log3 $name, 5, "parse status message for $name";
+    Log3 $name, 5, "NUKIDevice ($name) - parse status message for $name";
     
     NUKIDevice_WriteReadings($hash,$decode_json);
 }
@@ -330,12 +376,14 @@ sub NUKIDevice_WriteReadings($$) {
     
     
     my $battery;
-    if( $decode_json->{batteryCritical} eq "false" ) {
-        $battery = "ok";
-    } elsif ( $decode_json->{batteryCritical} eq "true" ) {
-        $battery = "low";
-    } else {
-        $battery = "parseError";
+    if( defined($decode_json->{batteryCritical}) ) {
+        if( $decode_json->{batteryCritical} eq "false" ) {
+            $battery = "ok";
+        } elsif ( $decode_json->{batteryCritical} eq "true" ) {
+            $battery = "low";
+        } else {
+            $battery = "parseError";
+        }
     }
 
     if( defined($hash->{helper}{lockAction}) ) {
@@ -354,7 +402,7 @@ sub NUKIDevice_WriteReadings($$) {
         readingsBulkUpdate( $hash, "battery", $battery );
         
         delete $hash->{helper}{lockAction};
-        Log3 $name, 5, "readings set for $name";
+        Log3 $name, 5, "NUKIDevice ($name) - readings set for $name";
     
     } else {
         
@@ -364,12 +412,59 @@ sub NUKIDevice_WriteReadings($$) {
         readingsBulkUpdate( $hash, "battery", $battery );
         readingsBulkUpdate( $hash, "success", $decode_json->{success} );
     
-        Log3 $name, 5, "readings set for $name";
+        Log3 $name, 5, "NUKIDevice ($name) - readings set for $name";
     }
     
     readingsEndUpdate( $hash, 1 );
     
     return undef;
+}
+
+sub NUKIDevice_CGI() {
+
+    my ($request) = @_;
+
+    # data received
+    if ( defined( $FW_httpheader{UUID} ) ) {
+        if ( defined( $modules{NUKIDevice}{defptr} ) ) {
+            while ( my ( $key, $value ) = each %{ $modules{NUKIDevice}{defptr} } ) {
+
+                my $uuid = ReadingsVal( $key, "uuid", undef );
+                next if ( !$uuid || $uuid ne $FW_httpheader{UUID} );
+
+                $defs{$key}{WEBHOOK_COUNTER}++;
+                $defs{$key}{WEBHOOK_LAST} = TimeNow();
+
+                Log3 $key, 4, "NUKIDevice ($key) - Received webhook for matching UUID at device $key";
+
+                my $delay = undef;
+
+# we need some delay as to the Robo seems to send webhooks but it's status does
+# not really reflect the change we'd expect to get here already so give 'em some
+# more time to think about it...
+                $delay = "2" if ( defined( $defs{$key}{LAST_COMMAND} ) && time() - time_str2num( $defs{$key}{LAST_COMMAND} ) < 3 );
+
+                #Hier muß die NUKIDevice_Parse Funktion aufgerufen werden
+                last;
+            }
+        }
+
+        return ( undef, undef );
+    }
+
+    # no data received
+    else {
+        Log3 undef, 4, "NUKIDevice - received malformed request\n$request";
+    }
+
+    return ( "text/plain; charset=utf-8", "Call failure: " . $request );
+}
+
+sub NUKIDevice_time2sec($) {
+    my ($timeString) = @_;
+    my @time = split /:/, $timeString;
+
+    return $time[0] * 3600 + $time[1] * 60;
 }
 
 

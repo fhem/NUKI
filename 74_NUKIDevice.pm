@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.3.36";
+my $version = "0.3.40";
 
 
 
@@ -44,7 +44,7 @@ sub NUKIDevice_Initialize($) {
 
     $hash->{SetFn}	    = "NUKIDevice_Set";
     $hash->{DefFn}	    = "NUKIDevice_Define";
-    $hash->{UndefFn}	    = "NUKIDevice_Undef";
+    $hash->{UndefFn}	= "NUKIDevice_Undef";
     $hash->{AttrFn}	    = "NUKIDevice_Attr";
     
     my $webhookFWinstance = join( ",", devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
@@ -90,6 +90,7 @@ sub NUKIDevice_Define($$) {
     $hash->{NUKIID} 	= $nukiId;
     $hash->{VERSION} 	= $version;
     $hash->{STATE}      = 'Initialized';
+    my $infix = "NUKIDevice";
     
     
     AssignIoPort($hash,$iodev) if( !$hash->{IODev} );
@@ -120,6 +121,14 @@ sub NUKIDevice_Define($$) {
 
     $attr{$name}{room} = "NUKI" if( !defined( $attr{$name}{room} ) );
     
+    if ( NUKIDevice_addExtension( $name, "NUKIDevice_CGI", $infix ) ) {
+        $hash->{fhem}{infix} = $infix;
+    }
+
+    $hash->{WEBHOOK_REGISTER} = "unregistered";
+    
+    
+    
     if( $init_done ) {
         InternalTimer( gettimeofday()+int(rand(10)), "NUKIDevice_GetUpdate", $hash, 0 );
     } else {
@@ -136,6 +145,10 @@ sub NUKIDevice_Undef($$) {
     my $nukiId = $hash->{NUKIID};
     my $name = $hash->{NAME};
     
+    
+    if ( defined( $hash->{fhem}{infix} ) ) {
+        NUKIDevice_removeExtension( $hash->{fhem}{infix} );
+    }
     
     RemoveInternalTimer($hash);
 
@@ -194,7 +207,7 @@ sub NUKIDevice_Attr(@) {
         my $webhookHttpHostname = ( $attrName eq "webhookHttpHostname" ? $attrVal : AttrVal( $name, "webhookHttpHostname", "" ) );
         my $webhookFWinstance = ( $attrName eq "webhookFWinstance" ? $attrVal : AttrVal( $name, "webhookFWinstance", "" ) );
         
-        $hash->{WEBHOOK_URI} = "%2F" . AttrVal( $webhookFWinstance, "webname", "fhem" ) . "%2FNUKIDevice";
+        $hash->{WEBHOOK_URI} = "/" . AttrVal( $webhookFWinstance, "webname", "fhem" ) . "/NUKIDevice";
         $hash->{WEBHOOK_PORT} = ( $attrName eq "webhookPort" ? $attrVal : AttrVal( $name, "webhookPort", InternalVal( $webhookFWinstance, "PORT", "" )) );
 
         $hash->{WEBHOOK_URL}     = "";
@@ -202,8 +215,8 @@ sub NUKIDevice_Attr(@) {
         
         if ( $webhookHttpHostname ne "" && $hash->{WEBHOOK_PORT} ne "" ) {
         
-            $hash->{WEBHOOK_URL} = "http://" . $webhookHttpHostname . ":" . $hash->{WEBHOOK_PORT} . $hash->{WEBHOOK_URI};
-            my $url = "http%3A%2F%2F$webhookHttpHostname" . "%3A" . $hash->{WEBHOOK_PORT} . $hash->{WEBHOOK_URI} . "-" . $hash->{NUKIID};
+            $hash->{WEBHOOK_URL} = "http://" . $webhookHttpHostname . ":" . $hash->{WEBHOOK_PORT} . $hash->{WEBHOOK_URI} . "-" . $hash->{NUKIID};
+            my $url = "http://$webhookHttpHostname" . ":" . $hash->{WEBHOOK_PORT} . $hash->{WEBHOOK_URI} . "-" . $hash->{NUKIID};
 
             Log3 $name, 3, "NUKIDevice ($name) - URL ist: $url";
             NUKIDevice_ReadFromNUKIBridge($hash,"callback/add",$url,undef ) if( $init_done );
@@ -215,6 +228,34 @@ sub NUKIDevice_Attr(@) {
     }
     
     return undef;
+}
+
+sub NUKIDevice_addExtension($$$) {
+
+    my ( $name, $func, $link ) = @_;
+    my $url = "/$link";
+
+    
+    return 0 if ( defined( $data{FWEXT}{$url} ) && $data{FWEXT}{$url}{deviceName} ne $name );
+
+    Log3 $name, 2, "NUKIDevice ($name) - Registering NUKIDevice for webhook URI $url ...";
+    
+    $data{FWEXT}{$url}{deviceName} = $name;
+    $data{FWEXT}{$url}{FUNC}       = $func;
+    $data{FWEXT}{$url}{LINK}       = $link;
+
+    return 1;
+}
+
+sub NUKIDevice_removeExtension($) {
+    
+    my ($link) = @_;
+
+    my $url  = "?/$link";
+    my $name = $data{FWEXT}{$url}{deviceName};
+    
+    Log3 $name, 2, "NUKIDevice ($name) - Unregistering NUKIDevice for webhook URL $url...";
+    delete $data{FWEXT}{$url};
 }
 
 sub NUKIDevice_Set($$@) {
@@ -423,48 +464,50 @@ sub NUKIDevice_WriteReadings($$) {
 sub NUKIDevice_CGI() {
 
     my ($request) = @_;
-
-    # data received
-    if ( defined( $FW_httpheader{UUID} ) ) {
+    
+    my $hash;
+    my $name;
+    my $nukiId;
+    
+    # data received   Testaufruf: wget --post-data '{"nukiId": 102844, "state": 1,"stateName": "locked", "batteryCritical": false}' http://10.6.6.20:8083/fhem/NUKIDevice-102844
+    
+    my $header = join("\n", @FW_httpheader);
+    printf "\n\nHTTP Header: $header\n\n";
+    printf "\n\nRequest: $request\n\n";
+    
+    
+    my ($first,$json) = split("&",$request,2);
+    my $decode_json = decode_json($json);
+    
+    
+    if( ref($decode_json) eq "HASH" ) {
         if ( defined( $modules{NUKIDevice}{defptr} ) ) {
             while ( my ( $key, $value ) = each %{ $modules{NUKIDevice}{defptr} } ) {
 
-                my $uuid = ReadingsVal( $key, "uuid", undef );
-                next if ( !$uuid || $uuid ne $FW_httpheader{UUID} );
+                $hash = $modules{NUKIDevice}{defptr}{$key};
+                $name = $hash->{NAME};
+                $nukiId = InternalVal( $name, "NUKIID", undef );
+                next if ( !$nukiId or $nukiId ne $decode_json->{nukiId} );
 
-                $defs{$key}{WEBHOOK_COUNTER}++;
-                $defs{$key}{WEBHOOK_LAST} = TimeNow();
+                $hash->{WEBHOOK_COUNTER}++;
+                $hash->{WEBHOOK_LAST} = TimeNow();
 
-                Log3 $key, 4, "NUKIDevice ($key) - Received webhook for matching UUID at device $key";
-
-                my $delay = undef;
-
-# we need some delay as to the Robo seems to send webhooks but it's status does
-# not really reflect the change we'd expect to get here already so give 'em some
-# more time to think about it...
-                $delay = "2" if ( defined( $defs{$key}{LAST_COMMAND} ) && time() - time_str2num( $defs{$key}{LAST_COMMAND} ) < 3 );
-
-                #Hier muß die NUKIDevice_Parse Funktion aufgerufen werden
-                last;
+                Log3 $name, 4, "NUKIDevice ($name) - Received webhook for matching NukiId at device $name";
+            
+                NUKIDevice_Parse($hash,$json);
             }
         }
-
+        
         return ( undef, undef );
     }
-
+    
     # no data received
     else {
+    
         Log3 undef, 4, "NUKIDevice - received malformed request\n$request";
     }
 
     return ( "text/plain; charset=utf-8", "Call failure: " . $request );
-}
-
-sub NUKIDevice_time2sec($) {
-    my ($timeString) = @_;
-    my @time = split /:/, $timeString;
-
-    return $time[0] * 3600 + $time[1] * 60;
 }
 
 

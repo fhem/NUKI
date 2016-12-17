@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.3.36";
+my $version = "0.3.40";
 
 
 
@@ -267,6 +267,7 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
     my $name = $hash->{NAME};
     
     RemoveInternalTimer($hash);
+    Log3 $name, 4, "NUKIBridge ($name) - NUKIBridge_GetCheckBridgeAlive";
     
     if( !IsDisabled($name) ) {
 

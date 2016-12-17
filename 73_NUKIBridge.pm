@@ -72,16 +72,16 @@ sub NUKIBridge_Initialize($) {
     # Consumer
     $hash->{SetFn}      = "NUKIBridge_Set";
     $hash->{GetFn}      = "NUKIBridge_Get";
-    $hash->{DefFn}	= "NUKIBridge_Define";
-    $hash->{UndefFn}	= "NUKIBridge_Undef";
-    $hash->{AttrFn}	= "NUKIBridge_Attr";
-    $hash->{AttrList} 	= "disable:1 ".
+    $hash->{DefFn}      = "NUKIBridge_Define";
+    $hash->{UndefFn}    = "NUKIBridge_Undef";
+    $hash->{AttrFn}     = "NUKIBridge_Attr";
+    $hash->{AttrList}   = "disable:1 ".
                           $readingFnAttributes;
 
 
     foreach my $d(sort keys %{$modules{NUKIBridge}{defptr}}) {
-	my $hash = $modules{NUKIBridge}{defptr}{$d};
-	$hash->{VERSION} 	= $version;
+        my $hash = $modules{NUKIBridge}{defptr}{$d};
+        $hash->{VERSION} 	= $version;
     }
 }
 
@@ -103,15 +103,16 @@ sub NUKIBridge_Define($$) {
     
 
 
-    my $name    	= $a[0];
-    my $host    	= $a[2];
+    my $name            = $a[0];
+    my $host            = $a[2];
     my $token           = $a[3];
-    my $port		= 8080;
+    my $port            = 8080;
 
-    $hash->{HOST} 	= $host;
-    $hash->{PORT} 	= $port;
-    $hash->{TOKEN} 	= $token;
-    $hash->{VERSION} 	= $version;
+    $hash->{HOST}       = $host;
+    $hash->{PORT}       = $port;
+    $hash->{TOKEN}      = $token;
+    $hash->{VERSION}    = $version;
+    $hash->{helper}{aliveCount} = 0;
     
 
 
@@ -157,23 +158,23 @@ sub NUKIBridge_Attr(@) {
     
     if( $attrName eq "disable" ) {
         if( $cmd eq "set" and $attrVal eq "1" ) {
-	    readingsSingleUpdate ( $hash, "state", "disabled", 1 );
+            readingsSingleUpdate ( $hash, "state", "disabled", 1 );
             Log3 $name, 3, "NUKIBridge ($name) - disabled";
-	}
-	
-	elsif( $cmd eq "del" ) {
+        }
+
+        elsif( $cmd eq "del" ) {
             readingsSingleUpdate ( $hash, "state", "active", 1 );
             Log3 $name, 3, "NUKIBridge ($name) - enabled";
         }
     }
     
     if( $attrName eq "disabledForIntervals" ) {
-	if( $cmd eq "set" ) {
+        if( $cmd eq "set" ) {
             Log3 $name, 3, "NUKIBridge ($name) - enable disabledForIntervals";
             readingsSingleUpdate ( $hash, "state", "Unknown", 1 );
-	}
-	
-	elsif( $cmd eq "del" ) {
+        }
+
+        elsif( $cmd eq "del" ) {
             readingsSingleUpdate ( $hash, "state", "active", 1 );
             Log3 $name, 3, "NUKIBridge ($name) - delete disabledForIntervals";
         }
@@ -205,28 +206,28 @@ sub NUKIBridge_Set($@) {
     } elsif($cmd eq 'fwUpdate') {
         return "usage: fwUpdate" if( @args != 0 );
     
-        NUKIBridge_CallBlocking($hash,"fwupdate",undef);
+        NUKIBridge_CallBlocking($hash,"fwupdate",undef) if( !IsDisabled($name) );
         
         return undef;
         
     } elsif($cmd eq 'reboot') {
         return "usage: reboot" if( @args != 0 );
     
-        NUKIBridge_CallBlocking($hash,"reboot",undef);
+        NUKIBridge_CallBlocking($hash,"reboot",undef) if( !IsDisabled($name) );
         
         return undef;
         
     } elsif($cmd eq 'clearLog') {
         return "usage: clearLog" if( @args != 0 );
         
-        NUKIBridge_CallBlocking($hash,"clearlog",undef);
+        NUKIBridge_CallBlocking($hash,"clearlog",undef) if( !IsDisabled($name) );
         
     } elsif($cmd eq 'callbackRemove') {
         return "usage: callbackRemove" if( @args != 1 );
         my $id = "id=" . join( " ", @args );
         
-        my $resp = NUKIBridge_CallBlocking($hash,"callback/remove",$id);
-        if( $resp->{success} eq "true" ) {
+        my $resp = NUKIBridge_CallBlocking($hash,"callback/remove",$id) if( !IsDisabled($name) );
+        if( $resp->{success} eq "true" and !IsDisabled($name) ) {
             return "Success Callback $id removed";
         } else {
             return "remove Callback failed";
@@ -247,12 +248,12 @@ sub NUKIBridge_Get($@) {
     if($cmd eq 'logFile') {
         return "usage: logFile" if( @args != 0 );
 
-        NUKIBridge_getLogfile($hash);
+        NUKIBridge_getLogfile($hash) if( !IsDisabled($name) );
         
     } elsif($cmd eq 'callbackList') {
         return "usage: callbackList" if( @args != 0 );
 
-        NUKIBridge_getCallbackList($hash);
+        NUKIBridge_getCallbackList($hash) if( !IsDisabled($name) );
         
     } else {
         my $list = "logFile:noArg callbackList:noArg";
@@ -273,7 +274,7 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
 
         NUKIBridge_Call($hash,$hash,"alive",undef,undef);
     
-        InternalTimer( gettimeofday()+30+int(rand(13)), "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
+        InternalTimer( gettimeofday()+17+int(rand(15)), "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
         Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
     }
 }
@@ -300,7 +301,6 @@ sub NUKIBridge_Call($$$$$) {
     my $port    =   $hash->{PORT};
     my $token   =   $hash->{TOKEN};
     
-    return "Only single call to Bridge, please try again later" if( $hash->{helper}{BRIDGE_CALL} );
     
     my $uri = "http://" . $hash->{HOST} . ":" . $port;
     $uri .= "/" . $path if( defined $path);
@@ -309,19 +309,18 @@ sub NUKIBridge_Call($$$$$) {
     $uri .= "&url=" . $lockAction if( defined($lockAction) and $path eq "callback/add" );
     $uri .= "&nukiId=" . $nukiId if( defined($nukiId) );
 
-    $hash->{helper}{BRIDGE_CALL} = 1;
 
     HttpUtils_NonblockingGet(
-	{
-	    url            => $uri,
-	    timeout        => 30,
-	    hash           => $hash,
-	    chash          => $chash,
-	    endpoint       => $path,
-	    header         => "Accept: application/json",
-	    method         => "GET",
-	    callback       => \&NUKIBridge_Distribution,
-	}
+        {
+            url            => $uri,
+            timeout        => 30,
+            hash           => $hash,
+            chash          => $chash,
+            endpoint       => $path,
+            header         => "Accept: application/json",
+            method         => "GET",
+            callback       => \&NUKIBridge_Distribution,
+        }
     );
     
     Log3 $name, 4, "NUKIBridge ($name) - Send HTTP POST with URL $uri";
@@ -335,22 +334,21 @@ sub NUKIBridge_Distribution($$$) {
     my $name            = $hash->{NAME};
     my $host            = $hash->{HOST};
     
-    delete $hash->{helper}{BRIDGE_CALL};
     
     readingsBeginUpdate($hash);
     
     if( defined( $err ) ) {
-
-	if ( $err ne "" ) {
+        if ( $err ne "" ) {
             if ($param->{endpoint} eq "alive") {
-                readingsBulkUpdate( $hash, "state", "not connected");
+                readingsBulkUpdate( $hash, "state", "not connected") if( $hash->{helper}{aliveCount} > 1 );
+                $hash->{helper}{aliveCount} = $hash->{helper}{aliveCount} + 1;
             }
             
             readingsBulkUpdate( $hash, "lastError", $err ) if( ReadingsVal($name,"state","not connected") eq "not connected" );
             Log3 $name, 4, "NUKIBridge ($name) - error while requesting: $err";
             readingsEndUpdate( $hash, 1 );
             return $err;
-	}
+        }
     }
 
     if( $json eq "" and exists( $param->{code} ) && $param->{code} ne 200 ) {
@@ -360,14 +358,15 @@ sub NUKIBridge_Distribution($$$) {
             Log3 $name, 5, "NUKIBridge ($name) - Bridge ist online";
             
             readingsEndUpdate( $hash, 1 );
+            $hash->{helper}{aliveCount} = 0;
             return;
         }
         
         readingsBulkUpdate( $hash, "lastError", "Internal error, " .$param->{code} );
-	Log3 $name, 4, "NUKIBridge ($name) - received http code " .$param->{code}." without any data after requesting";
+        Log3 $name, 4, "NUKIBridge ($name) - received http code " .$param->{code}." without any data after requesting";
 
-	readingsEndUpdate( $hash, 1 );
-	return "received http code ".$param->{code}." without any data after requesting";
+        readingsEndUpdate( $hash, 1 );
+        return "received http code ".$param->{code}." without any data after requesting";
     }
 
     if( ( $json =~ /Error/i ) and exists( $param->{code} ) ) {    
@@ -381,13 +380,13 @@ sub NUKIBridge_Distribution($$$) {
         NUKIDevice_Parse($param->{chash},$param->{code}) if( $param->{code} eq 400 and $hash != $param->{chash} );       
         
         
-	Log3 $name, 4, "NUKIBridge ($name) - invalid API token" if( $param->{code} eq 401 );
-	Log3 $name, 4, "NUKIBridge ($name) - nukiId is not known" if( $param->{code} eq 404 );
-	Log3 $name, 4, "NUKIBridge ($name) - action is undefined" if( $param->{code} eq 400 and $hash == $param->{chash} );
-	
-	
-	######### Zum testen da ich kein Nuki Smartlock habe ############
-	#if ( $param->{code} eq 404 ) {
+        Log3 $name, 4, "NUKIBridge ($name) - invalid API token" if( $param->{code} eq 401 );
+        Log3 $name, 4, "NUKIBridge ($name) - nukiId is not known" if( $param->{code} eq 404 );
+        Log3 $name, 4, "NUKIBridge ($name) - action is undefined" if( $param->{code} eq 400 and $hash == $param->{chash} );
+
+
+    ######### Zum testen da ich kein Nuki Smartlock habe ############
+    #if ( $param->{code} eq 404 ) {
         #    if( defined($param->{chash}->{helper}{lockAction}) ) {
         #        Log3 $name, 3, "NUKIBridge ($name) - Test JSON String for lockAction";
         #        $json = '{"success": true, "batteryCritical": false}';
@@ -400,7 +399,7 @@ sub NUKIBridge_Distribution($$$) {
         
         
         readingsEndUpdate( $hash, 1 );
-	return $param->{code};
+        return $param->{code};
     }
     
     if( $hash == $param->{chash} ) {
@@ -557,8 +556,9 @@ sub NUKIBridge_getLogfile($) {
             $ret .= "<td><b>Type</b></td>";
             $ret .= '</tr>';
     
+    
         foreach my $logs (@{$decode_json}) {
-        
+            
             $ret .= "<td>$logs->{timestamp}</td>";
             $ret .= "<td> </td>";
             $ret .= "<td>$logs->{type}</td>";
@@ -620,14 +620,12 @@ sub NUKIBridge_CallBlocking($$$) {
     my $port    = $hash->{PORT};
     my $token   = $hash->{TOKEN};
     
-    return "Only single call to Bridge, please try again later" if( $hash->{helper}{BRIDGE_CALL} );
     
     my $url = "http://" . $hash->{HOST} . ":" . $port;
     $url .= "/" . $path if( defined $path);
     $url .= "?token=" . $token if( defined($token) );
     $url .= "&" . $obj if( defined($obj) );
     
-    $hash->{helper}{BRIDGE_CALL} = 1;
     
     my($err,$data)  = HttpUtils_BlockingGet({
       url           => $url,
@@ -635,8 +633,7 @@ sub NUKIBridge_CallBlocking($$$) {
       method        => "GET",
       header        => "Content-Type: application/json",
     });
-    
-    delete $hash->{helper}{BRIDGE_CALL};
+
 
     if( !$data ) {
         Log3 $name, 3, "NUKIDevice ($name) - empty answer received for $url";
@@ -753,6 +750,15 @@ sub NUKIBridge_CallBlocking($$$) {
     <li>0_name - Name des ersten gefunden Nuki Smartlocks</li>
     <li>smartlockCount - Anzahl aller gefundenen Smartlock</li>
     <li>bridgeAPI - API Version der Bridge</li>
+    <li>bridgeType - Hardware oder Software/App Bridge</li>
+    <li>currentTime - aktuelle Zeit auf der Bridge zum zeitpunkt des Info holens</li>
+    <li>firmwareVersion - aktuell auf der Bridge verwendete Firmwareversion</li>
+    <li>hardwareId - ID der Hardware Bridge</li>
+    <li>lastError - gibt die letzte HTTP Errormeldung wieder</li>
+    <li>serverConnected - true/false gibt an ob die Hardwarebridge Verbindung zur Nuki-Cloude hat.</li>
+    <li>serverId - gibt die ID des Cloudeservers wieder</li>
+    <li>uptime - Uptime der Bridge in Sekunden</li>
+    <li>wifiFirmwareVersion- Firmwareversion des Wifi Modules der Bridge</li>
     <br>
     Die vorangestellte Zahl ist forlaufend und gibt beginnend bei 0 die Eigenschaften <b>Eines</b> Smartlocks wieder.
   </ul>
@@ -761,7 +767,19 @@ sub NUKIBridge_CallBlocking($$$) {
   <b>Set</b>
   <ul>
     <li>autocreate - Veranlasst ein erneutes Einlesen aller Smartlocks von der Bridge und falls noch nicht in FHEM vorhanden das autimatische anlegen.</li>
-    <li>statusRequest - startet einen checkAlive der Bridge, es wird festgestellt ob die Bridge noch online ist</li>
+    <li>callbackRemove - Löschen einer Callback Instanz auf der Bridge. Die Instanz ID kann mittels get callbackList ermittelt werden</li>
+    <li>clearLog - löscht das Logfile auf der Bridge</li>
+    <li>fwUpdate - schaut nach einer neueren Firmware und installiert diese sofern vorhanden</li>
+    <li>info - holt aktuellen Informationen über die Bridge</li>
+    <li>reboot - veranlässt ein reboot der Bridge</li>
+    <br>
+  </ul>
+  <br><br>
+  <a name="NUKIBridgeget"></a>
+  <b>Get</b>
+  <ul>
+    <li>callbackList - Gibt die Liste der eingetragenen Callback URL's wieder. Die Bridge nimmt maximal 3 auf.</li>
+    <li>logFile - Zeigt das Logfile der Bridge an</li>
     <br>
   </ul>
   <br><br>

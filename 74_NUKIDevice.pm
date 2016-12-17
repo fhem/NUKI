@@ -42,25 +42,24 @@ sub NUKIDevice_Initialize($) {
 
     my ($hash) = @_;
 
-    $hash->{SetFn}	    = "NUKIDevice_Set";
-    $hash->{DefFn}	    = "NUKIDevice_Define";
-    $hash->{UndefFn}	= "NUKIDevice_Undef";
-    $hash->{AttrFn}	    = "NUKIDevice_Attr";
+    $hash->{SetFn}          = "NUKIDevice_Set";
+    $hash->{DefFn}          = "NUKIDevice_Define";
+    $hash->{UndefFn}        = "NUKIDevice_Undef";
+    $hash->{AttrFn}         = "NUKIDevice_Attr";
     
-    my $webhookFWinstance = join( ",", devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
+    my $webhookFWinstance   = join( ",", devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
     
-    $hash->{AttrList} 	    = "IODev ".
+    $hash->{AttrList}       = "IODev ".
                               "disable:1 ".
                               "webhookFWinstance:$webhookFWinstance ".
                               "webhookHttpHostname ".
-                              "webhookPort ".
                               $readingFnAttributes;
 
 
 
     foreach my $d(sort keys %{$modules{NUKIDevice}{defptr}}) {
-	my $hash = $modules{NUKIDevice}{defptr}{$d};
-	$hash->{VERSION} 	= $version;
+        my $hash = $modules{NUKIDevice}{defptr}{$d};
+        $hash->{VERSION} 	= $version;
     }
 }
 
@@ -87,8 +86,8 @@ sub NUKIDevice_Define($$) {
 
     my ($name,$nukiId)  = @a;
 
-    $hash->{NUKIID} 	= $nukiId;
-    $hash->{VERSION} 	= $version;
+    $hash->{NUKIID}     = $nukiId;
+    $hash->{VERSION}    = $version;
     $hash->{STATE}      = 'Initialized';
     my $infix = "NUKIDevice";
     
@@ -167,24 +166,26 @@ sub NUKIDevice_Attr(@) {
     my $token = $hash->{IODev}->{TOKEN};
 
     if( $attrName eq "disable" ) {
-	if( $cmd eq "set" ) {
-	    if( $attrVal eq "0" ) {
-		RemoveInternalTimer( $hash );
-		InternalTimer( gettimeofday()+2, "NUKIDevice_GetUpdateInternalTimer", $hash, 0 );
-		readingsSingleUpdate ( $hash, "state", "Initialized", 1 );
-		Log3 $name, 3, "NUKIDevice ($name) - enabled";
-	    } else {
-		readingsSingleUpdate ( $hash, "state", "disabled", 1 );
-		RemoveInternalTimer( $hash );
-		Log3 $name, 3, "NUKIDevice ($name) - disabled";
-	    }
-	    
-	} else {
-	
-	    RemoveInternalTimer( $hash );
-	    InternalTimer( gettimeofday()+2, "NUKIDevice_GetUpdateInternalTimer", $hash, 0 );
-	    readingsSingleUpdate ( $hash, "state", "Initialized", 1 );
-	    Log3 $name, 3, "NUKIDevice ($name) - enabled";
+        if( $cmd eq "set" and $attrVal eq "1" ) {
+            readingsSingleUpdate ( $hash, "state", "disabled", 1 );
+            Log3 $name, 3, "NUKIDevice ($name) - disabled";
+        }
+
+        elsif( $cmd eq "del" ) {
+            readingsSingleUpdate ( $hash, "state", "active", 1 );
+            Log3 $name, 3, "NUKIDevice ($name) - enabled";
+        }
+    }
+    
+    if( $attrName eq "disabledForIntervals" ) {
+        if( $cmd eq "set" ) {
+            Log3 $name, 3, "NUKIDevice ($name) - enable disabledForIntervals";
+            readingsSingleUpdate ( $hash, "state", "Unknown", 1 );
+        }
+
+        elsif( $cmd eq "del" ) {
+            readingsSingleUpdate ( $hash, "state", "active", 1 );
+            Log3 $name, 3, "NUKIDevice ($name) - delete disabledForIntervals";
         }
     }
     
@@ -251,7 +252,7 @@ sub NUKIDevice_removeExtension($) {
     
     my ($link) = @_;
 
-    my $url  = "?/$link";
+    my $url  = "/$link";
     my $name = $data{FWEXT}{$url}{deviceName};
     
     Log3 $name, 2, "NUKIDevice ($name) - Unregistering NUKIDevice for webhook URL $url...";
@@ -294,25 +295,8 @@ sub NUKIDevice_Set($$@) {
     }
     
     $hash->{helper}{lockAction} = $lockAction;
-    NUKIDevice_ReadFromNUKIBridge($hash,"lockAction",$lockAction,$hash->{NUKIID} );
+    NUKIDevice_ReadFromNUKIBridge($hash,"lockAction",$lockAction,$hash->{NUKIID} ) if( !IsDisabled($name) );
     
-    return undef;
-}
-
-sub NUKIDevice_GetUpdateTimer($) {
-
-    my ($hash) = @_;
-    my $name = $hash->{NAME};
-    
-    
-    RemoveInternalTimer($hash);
-    
-    if( !IsDisabled($name) ) {
-        NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
-        Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdateTimer Call NUKIDevice_ReadFromNUKIBridge";
-        InternalTimer( gettimeofday()+12+int(rand(18)), "NUKIDevice_GetUpdateTimer", $hash, 1 );
-    }
-
     return undef;
 }
 
@@ -469,7 +453,9 @@ sub NUKIDevice_CGI() {
     my $name;
     my $nukiId;
     
-    # data received   Testaufruf: wget --post-data '{"nukiId": 102844, "state": 1,"stateName": "locked", "batteryCritical": false}' http://10.6.6.20:8083/fhem/NUKIDevice-102844
+    # data received
+    # Testaufruf: wget --post-data '{"nukiId": 123456, "state": 1,"stateName": "locked", "batteryCritical": false}' http://10.6.6.20:8083/fhem/NUKIDevice-123456
+    
     
     my $header = join("\n", @FW_httpheader);
     printf "\n\nHTTP Header: $header\n\n";
@@ -576,6 +562,8 @@ sub NUKIDevice_CGI() {
   <b>Attributes</b>
   <ul>
     <li>disable - disables the Nuki device</li>
+    <li>webhookFWinstance - zu verwendene Webinstanz für den Callbackaufruf</li>
+    <li>webhookHttpHostname - IP oder FQDN vom FHEM Server für den Callbackaufruf</li>
     <br>
   </ul>
 </ul>

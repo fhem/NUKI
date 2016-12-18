@@ -682,7 +682,6 @@ sub NUKIBridge_CallBlocking($$$) {
 
 =begin html
 
-timestamp
 <a name="NUKIBridge"></a>
 <h3>NUKIBridge</h3>
 <ul>

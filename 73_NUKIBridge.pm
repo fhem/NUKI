@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.3.41";
+my $version = "0.4.0";
 
 
 
@@ -552,7 +552,22 @@ sub NUKIBridge_getLogfile($) {
         foreach my $logs (@{$decode_json}) {
             $ret .= '<tr class="odd">';
             
+            if($logs->{timestamp}) {
+                $ret .= "<td><b>timestamp:</b> </td>";
+                $ret .= "<td>$logs->{timestamp}</td>";
+                $ret .= '<td> </td>';
+            }
+            
+            if($logs->{type}) {
+                $ret .= "<td><b>type:</b> </td>";
+                $ret .= "<td>$logs->{type}</td>";
+                $ret .= '<td> </td>';
+            }
+            
             foreach my $d (reverse sort keys %{$logs}) {
+                next if( $d eq "type" );
+                next if( $d eq "timestamp" );
+               
                 $ret .= "<td><b>$d:</b> </td>";
                 $ret .= "<td>$logs->{$d}</td>";
                 $ret .= '<td> </td>';

@@ -681,6 +681,7 @@ sub NUKIBridge_CallBlocking($$$) {
 =item summary_DE Modul zur Steuerung des Nuki Smartlock über die Nuki Bridge.
 
 =begin html
+
 timestamp
 <a name="NUKIBridge"></a>
 <h3>NUKIBridge</h3>

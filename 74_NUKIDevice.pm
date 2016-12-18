@@ -458,10 +458,7 @@ sub NUKIDevice_CGI() {
     
     
     my $header = join("\n", @FW_httpheader);
-    printf "\n\nHTTP Header: $header\n\n";
-    printf "\n\nRequest: $request\n\n";
-    
-    
+
     my ($first,$json) = split("&",$request,2);
     my $decode_json = decode_json($json);
     

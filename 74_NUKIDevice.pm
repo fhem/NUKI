@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.3.40";
+my $version = "0.3.41";
 
 
 
@@ -562,8 +562,8 @@ sub NUKIDevice_CGI() {
   <b>Attributes</b>
   <ul>
     <li>disable - disables the Nuki device</li>
-    <li>webhookFWinstance - zu verwendene Webinstanz für den Callbackaufruf</li>
-    <li>webhookHttpHostname - IP oder FQDN vom FHEM Server für den Callbackaufruf</li>
+    <li>webhookFWinstance - Webinstanz of the Callback</li>
+    <li>webhookHttpHostname - IP or FQDN of the FHEM Server Callback</li>
     <br>
   </ul>
 </ul>
@@ -619,6 +619,8 @@ sub NUKIDevice_CGI() {
   <b>Attribute</b>
   <ul>
     <li>disable - deaktiviert das Nuki Device</li>
+    <li>webhookFWinstance - zu verwendene Webinstanz für den Callbackaufruf</li>
+    <li>webhookHttpHostname - IP oder FQDN vom FHEM Server für den Callbackaufruf</li>
     <br>
   </ul>
 </ul>

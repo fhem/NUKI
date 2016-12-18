@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.3.40";
+my $version = "0.3.41";
 
 
 
@@ -547,21 +547,17 @@ sub NUKIBridge_getLogfile($) {
         Log3 $name, 4, "NUKIBridge ($name) - Tabelle mit Logdaten wird aufgebaut";
     
         my $ret = '<html><table width=100%><tr><td>';
-
         $ret .= '<table class="block wide">';
-
-            $ret .= '<tr class="odd">';
-            $ret .= "<td><b>Timestamp</b></td>";
-            $ret .= "<td> </td>";
-            $ret .= "<td><b>Type</b></td>";
-            $ret .= '</tr>';
-    
-    
+        
         foreach my $logs (@{$decode_json}) {
+            $ret .= '<tr class="odd">';
             
-            $ret .= "<td>$logs->{timestamp}</td>";
-            $ret .= "<td> </td>";
-            $ret .= "<td>$logs->{type}</td>";
+            foreach my $d (reverse sort keys %{$logs}) {
+                $ret .= "<td><b>$d:</b> </td>";
+                $ret .= "<td>$logs->{$d}</td>";
+                $ret .= '<td> </td>';
+            }
+            
             $ret .= '</tr>';
         }
     
@@ -670,7 +666,7 @@ sub NUKIBridge_CallBlocking($$$) {
 =item summary_DE Modul zur Steuerung des Nuki Smartlock über die Nuki Bridge.
 
 =begin html
-
+timestamp
 <a name="NUKIBridge"></a>
 <h3>NUKIBridge</h3>
 <ul>
@@ -699,6 +695,15 @@ sub NUKIBridge_CallBlocking($$$) {
     <li>0_name - Name of the first found Nuki Smartlock</li>
     <li>smartlockCount - number of all found Smartlocks</li>
     <li>bridgeAPI - API Version of bridge</li>
+    <li>bridgeType - Hardware bridge / Software bridge</li>
+    <li>currentTime - Current timestamp</li>
+    <li>firmwareVersion - Version of the bridge firmware</li>
+    <li>hardwareId - Hardware ID</li>
+    <li>lastError - Last connected error</li>
+    <li>serverConnected - Flag indicating whether or not the bridge is connected to the Nuki server</li>
+    <li>serverId - Server ID</li>
+    <li>uptime - Uptime of the bridge in seconds</li>
+    <li>wifiFirmwareVersion- Version of the WiFi modules firmware</li>
     <br>
     The preceding number is continuous, starts with 0 und returns the properties of <b>one</b> Smartlock.
    </ul>
@@ -707,7 +712,19 @@ sub NUKIBridge_CallBlocking($$$) {
   <b>Set</b>
   <ul>
     <li>autocreate - Prompts to re-read all Smartlocks from the bridge and if not already present in FHEM, create the autimatic.</li>
-    <li>statusRequest - starts a checkAlive of the bridge, it is determined whether the bridge is still online</li>
+    <li>callbackRemove -  Removes a previously added callback</li>
+    <li>clearLog - Clears the log of the Bridge</li>
+    <li>fwUpdate -  Immediately checks for a new firmware update and installs it</li>
+    <li>info -  Returns all Smart Locks in range and some device information of the bridge itself</li>
+    <li>reboot - reboots the bridge</li>
+    <br>
+  </ul>
+  <br><br>
+  <a name="NUKIBridgeget"></a>
+  <b>Get</b>
+  <ul>
+    <li>callbackList - List of register url callbacks. The Bridge register up to 3  url callbacks.</li>
+    <li>logFile - Retrieves the log of the Bridge</li>
     <br>
   </ul>
   <br><br>

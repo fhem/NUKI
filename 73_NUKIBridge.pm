@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.4.0";
+my $version = "0.4.3";
 
 
 
@@ -234,7 +234,9 @@ sub NUKIBridge_Set($@) {
         }
 
     } else {
-        my $list = "info:noArg autocreate:noArg clearLog:noArg fwUpdate:noArg reboot:noArg callbackRemove:0,1,2";
+        my  $list = ""; 
+        $list .= "info:noArg autocreate:noArg ";
+        $list .= "clearLog:noArg fwUpdate:noArg reboot:noArg callbackRemove:0,1,2" if( ReadingsVal($name,'bridgeType','Software') eq 'Hardware' );
         return "Unknown argument $cmd, choose one of $list";
     }
 
@@ -256,7 +258,7 @@ sub NUKIBridge_Get($@) {
         NUKIBridge_getCallbackList($hash) if( !IsDisabled($name) );
         
     } else {
-        my $list = "logFile:noArg callbackList:noArg";
+        my $list = "logFile:noArg callbackList:noArg" if( ReadingsVal($name,'bridgeType','Software') eq 'Hardware' );
         return "Unknown argument $cmd, choose one of $list";
     }
 
@@ -423,6 +425,17 @@ sub NUKIBridge_ResponseProcessing($$$) {
     my $name = $hash->{NAME};
     my $decode_json;
     
+    
+    if( !$json ) {
+        Log3 $name, 3, "NUKIBridge ($name) - empty answer received";
+        return undef;
+    } elsif( $json =~ m'HTTP/1.1 200 OK' ) {
+        Log3 $name, 4, "NUKIBridge ($name) - empty answer received";
+        return undef;
+    } elsif( $json !~ m/^[\[{].*[}\]]$/ ) {
+        Log3 $name, 3, "NUKIBridge ($name) - invalid json detected: $json";
+        return "NUKIBridge ($name) - invalid json detected: $json";
+    }
     
     $decode_json = decode_json($json);
     

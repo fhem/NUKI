@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.4.1";
+my $version = "0.4.3";
 
 
 
@@ -191,6 +191,8 @@ sub NUKIDevice_Attr(@) {
     
     ######################
     #### webhook #########
+    
+    return "$attrName can only use with hardware bridge" if( ($attrName eq "webhookHttpHostname" or $attrName eq "webhookFWinstance") and ReadingsVal($hash->{IODev}->{NAME},'bridgeType','Software') eq 'Software' );
     
     return "Invalid value for attribute $attrName: can only by FQDN or IPv4 or IPv6 address" if ( $attrVal && $attrName eq "webhookHttpHostname" && $attrVal !~ /^([A-Za-z_.0-9]+\.[A-Za-z_.0-9]+)|[0-9:]+$/ );
 
@@ -358,6 +360,17 @@ sub NUKIDevice_Parse($$) {
     #########################################
     ####### Errorhandling #############
     
+    if( !$result ) {
+        Log3 $name, 3, "NUKIDevice ($name) - empty answer received";
+        return undef;
+    } elsif( $result =~ m'HTTP/1.1 200 OK' ) {
+        Log3 $name, 4, "NUKIDevice ($name) - empty answer received";
+        return undef;
+    } elsif( $result !~ m/^[\[{].*[}\]]$/ ) {
+        Log3 $name, 3, "NUKIDevice ($name) - invalid json detected: $result";
+        return "NUKIDevice ($name) - invalid json detected: $result";
+    }
+    
     if( $result =~ /\d{3}/ ) {
         if( $result eq 400 ) {
             readingsSingleUpdate( $hash, "state", "action is undefined", 1 );
@@ -460,6 +473,18 @@ sub NUKIDevice_CGI() {
     my $header = join("\n", @FW_httpheader);
 
     my ($first,$json) = split("&",$request,2);
+    
+    if( !$json ) {
+        Log3 $name, 3, "NUKIDevice ($name) - empty answer received";
+        return undef;
+    } elsif( $json =~ m'HTTP/1.1 200 OK' ) {
+        Log3 $name, 4, "NUKIDevice ($name) - empty answer received";
+        return undef;
+    } elsif( $json !~ m/^[\[{].*[}\]]$/ ) {
+        Log3 $name, 3, "NUKIDevice ($name) - invalid json detected: $json";
+        return "NUKIDevice ($name) - invalid json detected: $json";
+    }
+    
     my $decode_json = decode_json($json);
     
     

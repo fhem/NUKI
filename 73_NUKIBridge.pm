@@ -353,7 +353,7 @@ sub NUKIBridge_Distribution($$$) {
         }
     }
 
-    if( $json eq "" and exists( $param->{code} ) && $param->{code} ne 200 ) {
+    if( ($json eq "" or $json =~ /Error/i  ) and exists( $param->{code} ) and $param->{code} ne 200 ) {
         if( $param->{endpoint} eq "alive") {
     
             readingsBulkUpdate( $hash, "state", "connected" );

@@ -246,6 +246,7 @@ sub NUKIBridge_Get($@) {
 
     my ($hash, $name, $cmd, @args) = @_;
     my ($arg, @params) = @args;
+    my $list;
     
     if($cmd eq 'logFile') {
         return "usage: logFile" if( @args != 0 );
@@ -258,7 +259,7 @@ sub NUKIBridge_Get($@) {
         NUKIBridge_getCallbackList($hash) if( !IsDisabled($name) );
         
     } else {
-        my $list = "logFile:noArg callbackList:noArg" if( ReadingsVal($name,'bridgeType','Software') eq 'Hardware' );
+        $list = "logFile:noArg callbackList:noArg" if( ReadingsVal($name,'bridgeType','Software') eq 'Hardware' );
         return "Unknown argument $cmd, choose one of $list";
     }
 

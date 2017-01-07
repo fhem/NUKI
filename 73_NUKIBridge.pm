@@ -164,6 +164,7 @@ sub NUKIBridge_Attr(@) {
 
         elsif( $cmd eq "del" ) {
             readingsSingleUpdate ( $hash, "state", "active", 1 );
+            NUKIBridge_GetCheckBridgeAlive($hash);
             Log3 $name, 3, "NUKIBridge ($name) - enabled";
         }
     }
@@ -176,6 +177,7 @@ sub NUKIBridge_Attr(@) {
 
         elsif( $cmd eq "del" ) {
             readingsSingleUpdate ( $hash, "state", "active", 1 );
+            NUKIBridge_GetCheckBridgeAlive($hash);
             Log3 $name, 3, "NUKIBridge ($name) - delete disabledForIntervals";
         }
     }

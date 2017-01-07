@@ -407,11 +407,9 @@ sub NUKIDevice_WriteReadings($$) {
     my $name                    = $hash->{NAME};
     
     
+    
     ############################
     #### Status des Smartlock
-    
-    readingsBeginUpdate($hash);
-    
     
     my $battery;
     if( defined($decode_json->{batteryCritical}) ) {
@@ -424,6 +422,9 @@ sub NUKIDevice_WriteReadings($$) {
         }
     }
 
+
+    readingsBeginUpdate($hash);
+    
     if( defined($hash->{helper}{lockAction}) ) {
     
         my ($state,$lockState);
@@ -440,8 +441,7 @@ sub NUKIDevice_WriteReadings($$) {
             $state = "error";
             NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
         }
-        
-        
+
         readingsBulkUpdate( $hash, "state", $state );
         readingsBulkUpdate( $hash, "lockState", $lockState );
         readingsBulkUpdate( $hash, "success", $decode_json->{success} );
@@ -462,6 +462,7 @@ sub NUKIDevice_WriteReadings($$) {
     }
     
     readingsEndUpdate( $hash, 1 );
+    
     
     return undef;
 }

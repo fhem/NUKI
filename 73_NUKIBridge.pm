@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.4.3";
+my $version = "0.4.4";
 
 
 
@@ -246,7 +246,6 @@ sub NUKIBridge_Get($@) {
 
     my ($hash, $name, $cmd, @args) = @_;
     my ($arg, @params) = @args;
-    my $list;
     
     if($cmd eq 'logFile') {
         return "usage: logFile" if( @args != 0 );
@@ -259,7 +258,8 @@ sub NUKIBridge_Get($@) {
         NUKIBridge_getCallbackList($hash) if( !IsDisabled($name) );
         
     } else {
-        $list = "logFile:noArg callbackList:noArg" if( ReadingsVal($name,'bridgeType','Software') eq 'Hardware' );
+        my $list = "";
+        $list .= "logFile:noArg callbackList:noArg" if( ReadingsVal($name,'bridgeType','Software') eq 'Hardware' );
         return "Unknown argument $cmd, choose one of $list";
     }
 
@@ -275,9 +275,9 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
     
     if( !IsDisabled($name) ) {
 
-        NUKIBridge_Call($hash,$hash,"alive",undef,undef);
+        NUKIBridge_Call($hash,$hash,"info",undef,undef);
     
-        InternalTimer( gettimeofday()+17+int(rand(15)), "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
+        InternalTimer( gettimeofday()+15+int(rand(15)), "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
         Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
     }
 }
@@ -338,12 +338,17 @@ sub NUKIBridge_Distribution($$$) {
     my $host            = $hash->{HOST};
     
     
+    Log3 $name, 5, "NUKIBridge ($name) - Response JSON: $json";
+    Log3 $name, 5, "NUKIBridge ($name) - Response ERROR: $err";
+    Log3 $name, 5, "NUKIBridge ($name) - Response CODE: $param->{code}";
+    
     readingsBeginUpdate($hash);
     
     if( defined( $err ) ) {
         if ( $err ne "" ) {
-            if ($param->{endpoint} eq "alive") {
+            if ($param->{endpoint} eq "info") {
                 readingsBulkUpdate( $hash, "state", "not connected") if( $hash->{helper}{aliveCount} > 1 );
+                Log3 $name, 5, "NUKIBridge ($name) - Bridge ist offline";
                 $hash->{helper}{aliveCount} = $hash->{helper}{aliveCount} + 1;
             }
             
@@ -354,16 +359,7 @@ sub NUKIBridge_Distribution($$$) {
         }
     }
 
-    if( ($json eq "" or $json =~ /Error/i  ) and exists( $param->{code} ) and $param->{code} ne 200 ) {
-        if( $param->{endpoint} eq "alive") {
-    
-            readingsBulkUpdate( $hash, "state", "connected" );
-            Log3 $name, 5, "NUKIBridge ($name) - Bridge ist online";
-            
-            readingsEndUpdate( $hash, 1 );
-            $hash->{helper}{aliveCount} = 0;
-            return;
-        }
+    if( $json eq "" and exists( $param->{code} ) and $param->{code} ne 200 ) {
         
         readingsBulkUpdate( $hash, "lastError", "Internal error, " .$param->{code} );
         Log3 $name, 4, "NUKIBridge ($name) - received http code " .$param->{code}." without any data after requesting";
@@ -447,6 +443,13 @@ sub NUKIBridge_ResponseProcessing($$$) {
     }
     
     elsif( $path eq "info" ) {
+        readingsBeginUpdate( $hash );
+        readingsBulkUpdate( $hash, "state", "connected" );
+        Log3 $name, 5, "NUKIBridge ($name) - Bridge ist online";
+            
+        readingsEndUpdate( $hash, 1 );
+        $hash->{helper}{aliveCount} = 0;
+        
         NUKIBridge_InfoProcessing($hash,$decode_json);
     
     } else {

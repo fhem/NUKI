@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.4.3";
+my $version = "0.4.4";
 
 
 
@@ -428,9 +428,17 @@ sub NUKIDevice_WriteReadings($$) {
     
         my ($state,$lockState);
         
-        $state = $hash->{helper}{lockAction} if( $decode_json->{success} eq "true" );
-        $state = "error" if( $decode_json->{success} eq "false" );
-        $lockState = $hash->{helper}{lockAction} if( $decode_json->{success} eq "true" );
+        
+        if( $decode_json->{success} eq "true" ) {
+            $state = $hash->{helper}{lockAction};
+            $lockState = $hash->{helper}{lockAction};
+            NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
+            
+        } elsif ( $decode_json->{success} eq "false" ) {
+        
+            $state = "error";
+            NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
+        }
         
         
         readingsBulkUpdate( $hash, "state", $state );
@@ -466,8 +474,11 @@ sub NUKIDevice_CGI() {
     my $name;
     my $nukiId;
     
+    
     # data received
-    # Testaufruf: wget --post-data '{"nukiId": 123456, "state": 1,"stateName": "locked", "batteryCritical": false}' http://10.6.6.20:8083/fhem/NUKIDevice-123456
+    # Testaufruf:
+    # curl --data '{"nukiId": 123456, "state": 1,"stateName": "locked", "batteryCritical": false}' http://10.6.6.20:8083/fhem/NUKIDevice-123456
+    # wget --post-data '{"nukiId": 123456, "state": 1,"stateName": "locked", "batteryCritical": false}' http://10.6.6.20:8083/fhem/NUKIDevice-123456
     
     
     my $header = join("\n", @FW_httpheader);

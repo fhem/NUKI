@@ -430,9 +430,10 @@ sub NUKIDevice_WriteReadings($$) {
         
         
         if( $decode_json->{success} eq "true" ) {
+        
             $state = $hash->{helper}{lockAction};
             $lockState = $hash->{helper}{lockAction};
-            NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
+            NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} ) if( ReadingsVal($hash->{IODev}->{NAME},'bridgeType','Software') eq 'Software' );
             
         } elsif ( $decode_json->{success} eq "false" ) {
         
@@ -444,11 +445,10 @@ sub NUKIDevice_WriteReadings($$) {
         readingsBulkUpdate( $hash, "state", $state );
         readingsBulkUpdate( $hash, "lockState", $lockState );
         readingsBulkUpdate( $hash, "success", $decode_json->{success} );
-        readingsBulkUpdate( $hash, "batteryCritical", $decode_json->{batteryCritical} );
-        readingsBulkUpdate( $hash, "battery", $battery );
+        
         
         delete $hash->{helper}{lockAction};
-        Log3 $name, 5, "NUKIDevice ($name) - readings set for $name";
+        Log3 $name, 5, "NUKIDevice ($name) - lockAction readings set for $name";
     
     } else {
         

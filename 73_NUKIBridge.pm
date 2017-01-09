@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version = "0.4.4";
+my $version = "0.4.5patch1";
 
 
 
@@ -113,6 +113,7 @@ sub NUKIBridge_Define($$) {
     $hash->{TOKEN}      = $token;
     $hash->{VERSION}    = $version;
     $hash->{helper}{aliveCount} = 0;
+    $hash->{helper}{checkLockState} = 0;
     
 
 
@@ -126,7 +127,7 @@ sub NUKIBridge_Define($$) {
     if( $init_done ) {
         NUKIBridge_firstRun($hash) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
     } else {
-        InternalTimer( gettimeofday()+15, "NUKIBridge_firstRun", $hash, 0 ) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
+        InternalTimer( gettimeofday()+15, 'NUKIBridge_firstRun', $hash, 0 ) if( ($hash->{HOST}) and ($hash->{TOKEN}) );
     }
 
     $modules{NUKIBridge}{defptr}{$hash->{HOST}} = $hash;
@@ -164,7 +165,8 @@ sub NUKIBridge_Attr(@) {
 
         elsif( $cmd eq "del" ) {
             readingsSingleUpdate ( $hash, "state", "active", 1 );
-            NUKIBridge_GetCheckBridgeAlive($hash);
+            InternalTimer( gettimeofday()+5, 'NUKIBridge_GetCheckBridgeAlive', $hash, 1 );
+            InternalTimer( gettimeofday()+10, 'NUKIBridge_LockStateTimer', $hash, 1 );
             Log3 $name, 3, "NUKIBridge ($name) - enabled";
         }
     }
@@ -177,7 +179,8 @@ sub NUKIBridge_Attr(@) {
 
         elsif( $cmd eq "del" ) {
             readingsSingleUpdate ( $hash, "state", "active", 1 );
-            NUKIBridge_GetCheckBridgeAlive($hash);
+            InternalTimer( gettimeofday()+5, 'NUKIBridge_GetCheckBridgeAlive', $hash, 1 );
+            InternalTimer( gettimeofday()+10, 'NUKIBridge_LockStateTimer', $hash, 1 );
             Log3 $name, 3, "NUKIBridge ($name) - delete disabledForIntervals";
         }
     }
@@ -272,14 +275,14 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
     my ($hash) = @_;
     my $name = $hash->{NAME};
     
-    RemoveInternalTimer($hash);
+    RemoveInternalTimer($hash,'NUKIBridge_GetCheckBridgeAlive');
     Log3 $name, 4, "NUKIBridge ($name) - NUKIBridge_GetCheckBridgeAlive";
     
     if( !IsDisabled($name) ) {
 
-        NUKIBridge_Call($hash,$hash,"info",undef,undef);
+        NUKIBridge_Call($hash,$hash,'info',undef,undef);
     
-        InternalTimer( gettimeofday()+15+int(rand(15)), "NUKIBridge_GetCheckBridgeAlive", $hash, 1 );
+        InternalTimer( gettimeofday()+15+int(rand(15)), 'NUKIBridge_GetCheckBridgeAlive', $hash, 1 );
         Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
     }
 }
@@ -290,9 +293,10 @@ sub NUKIBridge_firstRun($) {
     my $name = $hash->{NAME};
     
     
-    RemoveInternalTimer($hash);
-    NUKIBridge_Call($hash,$hash,"list",undef,undef) if( !IsDisabled($name) );
-    NUKIBridge_GetCheckBridgeAlive($hash);
+    RemoveInternalTimer($hash,'NUKIBridge_firstRun');
+    NUKIBridge_Call($hash,$hash,'list',undef,undef) if( !IsDisabled($name) );
+    InternalTimer( gettimeofday()+15, 'NUKIBridge_GetCheckBridgeAlive', $hash, 1 );
+    InternalTimer( gettimeofday()+60, 'NUKIBridge_LockStateTimer', $hash, 1 );
 
     return undef;
 }
@@ -438,7 +442,14 @@ sub NUKIBridge_ResponseProcessing($$$) {
     
     $decode_json = decode_json($json);
     
-    if( ref($decode_json) eq "ARRAY" and scalar(@{$decode_json}) > 0 and $path eq "list" ) {
+    if( ref($decode_json) eq "ARRAY" and scalar(@{$decode_json}) > 0 and $path eq "list" and $hash->{helper}{checkLockState} == 1 ) {
+
+        NUKIBridge_LockStateResponse($hash,$json);
+        $hash->{helper}{checkLockState} = 0;
+        Log3 $name, 5, "NUKIBridge ($name) - Run NUKIBridge_LockStateResponse with Path:$path and JSON-Data: $json";
+    }
+    
+    elsif( ref($decode_json) eq "ARRAY" and scalar(@{$decode_json}) > 0 and $path eq "list" and $hash->{helper}{checkLockState} == 0 ) {
 
         NUKIBridge_Autocreate($hash,$decode_json);
         NUKIBridge_Call($hash,$hash,"info",undef,undef) if( !IsDisabled($name) );
@@ -455,7 +466,7 @@ sub NUKIBridge_ResponseProcessing($$$) {
         NUKIBridge_InfoProcessing($hash,$decode_json);
     
     } else {
-        Log3 $name, 5, "NUKIDevice ($name) - Rückgabe Path nicht korrekt: $json";
+        Log3 $name, 5, "NUKIBridge ($name) - Rückgabe Path nicht korrekt: $json";
         return;
     }
     
@@ -684,6 +695,62 @@ sub NUKIBridge_CallBlocking($$$) {
     Log3 $name, 5, "NUKIBridge ($name) - Data: $data";
     Log3 $name, 4, "NUKIBridge ($name) - Blocking HTTP Abfrage beendet";
     return ($decode_json);
+}
+
+sub NUKIBridge_LockStateTimer($) {
+
+    my ($hash) = @_;
+    my $name = $hash->{NAME};
+    
+    RemoveInternalTimer($hash,'NUKIBridge_LockStateTimer');
+    Log3 $name, 4, "NUKIBridge ($name) - NUKIBridge_LockStateTimer";
+    
+    if( !IsDisabled($name) and ReadingsVal($name,'bridgeType','Hardware') eq 'Software' ) {
+        if( ReadingsVal($name,'smartlockCount',0) > 0 and $hash->{helper}{checkLockState} == 0 ) {
+            NUKIBridge_Call($hash,$hash,'list',undef,undef) if( ReadingsVal($name,'state','not connected') eq "connected" );
+            $hash->{helper}{checkLockState} = 1 ;
+        }
+    
+        InternalTimer( gettimeofday()+7, 'NUKIBridge_LockStateTimer', $hash, 1 );
+        Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_LockStateTimer";
+    }
+}
+
+sub NUKIBridge_LockStateResponse($$) {
+
+    my ($hash,$json)    = @_;
+
+    my $name            = $hash->{NAME};
+    my $nukiId;
+    my $nukiSmartlock;
+    my $decode_json;
+    my %response_hash;
+    my $dname;
+    my $dhash;
+
+
+    $decode_json = decode_json($json);
+
+    foreach $nukiSmartlock (@{$decode_json}) {
+
+        if( ref($nukiSmartlock->{lastKnownState}) eq "HASH" ) {
+            if ( defined( $modules{NUKIDevice}{defptr} ) ) {
+                while ( my ( $key, $value ) = each %{ $modules{NUKIDevice}{defptr} } ) {
+
+                    $dhash = $modules{NUKIDevice}{defptr}{$key};
+                    $dname = $dhash->{NAME};
+                    $nukiId = InternalVal( $dname, "NUKIID", undef );
+                    next if ( !$nukiId or $nukiId ne $nukiSmartlock->{nukiId} );
+
+                    Log3 $name, 4, "NUKIDevice ($dname) - Received LockState for matching NukiID $nukiId at device $dname";
+            
+                    %response_hash = ('state'=>$nukiSmartlock->{lastKnownState}{state}, 'stateName'=>$nukiSmartlock->{lastKnownState}{stateName},'batteryCritical'=>$nukiSmartlock->{lastKnownState}{batteryCritical},'timestamp'=>$nukiSmartlock->{lastKnownState}{timestamp});
+            
+                    NUKIDevice_Parse($dhash,encode_json \%response_hash);
+                }
+            }
+        }
+    }
 }
 
 

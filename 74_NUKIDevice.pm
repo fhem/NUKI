@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 #use Time::HiRes qw(gettimeofday);
 
-my $version = "0.4.4";
+my $version = "0.4.5patch1";
 
 
 
@@ -356,7 +356,7 @@ sub NUKIDevice_Parse($$) {
     my($hash,$result) = @_;
     my $name = $hash->{NAME};
 
-
+    Log3 $name, 5, "NUKIDevice ($name) - Parse with result: $result";
     #########################################
     ####### Errorhandling #############
     

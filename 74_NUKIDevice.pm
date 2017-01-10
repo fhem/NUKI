@@ -31,9 +31,9 @@ package main;
 use strict;
 use warnings;
 use JSON;
-#use Time::HiRes qw(gettimeofday);
 
-my $version = "0.4.5patch1";
+
+my $version = "0.4.5";
 
 
 
@@ -191,8 +191,6 @@ sub NUKIDevice_Attr(@) {
     
     ######################
     #### webhook #########
-    
-    return "$attrName can only use with hardware bridge" if( ($attrName eq "webhookHttpHostname" or $attrName eq "webhookFWinstance") and ReadingsVal($hash->{IODev}->{NAME},'bridgeType','Software') eq 'Software' );
     
     return "Invalid value for attribute $attrName: can only by FQDN or IPv4 or IPv6 address" if ( $attrVal && $attrName eq "webhookHttpHostname" && $attrVal !~ /^([A-Za-z_.0-9]+\.[A-Za-z_.0-9]+)|[0-9:]+$/ );
 

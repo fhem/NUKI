@@ -46,8 +46,8 @@ use JSON;
 
 use HttpUtils;
 
-my $version     = "0.6.1";
-my $bridgeapi   = "1.5";
+my $version     = "0.6.2";
+my $bridgeapi   = "1.6"; # 1.6 ist gleich 1.5 bei den hier verwendeten Funktionen
 
 
 
@@ -344,6 +344,15 @@ sub NUKIBridge_Call($$$$$) {
     $uri .= "&url=" . $lockAction if( defined($lockAction) and $path eq "callback/add" );
     $uri .= "&nukiId=" . $nukiId if( defined($nukiId) );
 
+# Hier ist die zentrale Anlaufstelle für alle Anfragen an die NUKIBridge
+# Wenn die Brige noch mit einer Anfrage beschäftigt ist, wird sie mit HTTP 503 not available antworten
+# Normale Statusanfragen von können dann übersprungen werden, da die Bridge ja offensichtlich beschäftigt ist
+# und damit verbunden. Das sind alle Anfragen mit $path=info
+#
+# Anfragen mit einer Aktion dürfen nicht übersprungen werden, sondern müssen ausgeführt werden, wenn die
+# Bridge wieder verfügbar ist.
+# Diese Anfragen sind mit einer $lockAction belegt
+
 
     HttpUtils_NonblockingGet(
         {
@@ -373,7 +382,7 @@ sub NUKIBridge_Distribution($$$) {
     Log3 $name, 5, "NUKIBridge ($name) - Response JSON: $json";
     Log3 $name, 5, "NUKIBridge ($name) - Response ERROR: $err";
     Log3 $name, 5, "NUKIBridge ($name) - Response CODE: $param->{code}" if( defined($param->{code}) and ($param->{code}) );
-    
+
     readingsBeginUpdate($hash);
     
     if( defined( $err ) ) {
@@ -391,13 +400,13 @@ sub NUKIBridge_Distribution($$$) {
         }
     }
 
-    if( $json eq "" and exists( $param->{code} ) and $param->{code} ne 200 ) {
+    if( $json !~ m/^[\[{].*[}\]]$/ and exists( $param->{code} ) and $param->{code} ne 200 ) {
     
-        if( $param->{code} eq 503 ) {
-            NUKIDevice_Parse($param->{chash},$param->{code}) if( $hash != $param->{chash} );
-            Log3 $name, 4, "NUKIBridge ($name) - smartlock is offline";
+        if( $param->{code} eq 503 and $json ne "" ) {
+            readingsBulkUpdate( $hash, "state", "unavailable");
+            Log3 $name, 4, "NUKIBridge ($name) - Bridge is unavailable";
             readingsEndUpdate( $hash, 1 );
-            return "received http code ".$param->{code}.": smartlock is offline";
+            return "received http code ".$param->{code}.": Bridge is unavailable";
         }
         
         readingsBulkUpdate( $hash, "lastError", "Internal error, " .$param->{code} );

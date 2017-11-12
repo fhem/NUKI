@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 
 
-my $version = "0.6.1";
+my $version = "0.6.2";
 
 
 
@@ -386,10 +386,7 @@ sub NUKIDevice_Parse($$) {
     } elsif( $result =~ m'HTTP/1.1 200 OK' ) {
         Log3 $name, 4, "NUKIDevice ($name) - empty answer received";
         return undef;
-    } elsif( $result !~ m/^[\[{].*[}\]]$/ ) {
-        Log3 $name, 3, "NUKIDevice ($name) - invalid json detected: $result";
-        return "NUKIDevice ($name) - invalid json detected: $result";
-    }
+    } 
     
     if( $result =~ /\d{3}/ ) {
         if( $result eq 400 ) {
@@ -405,12 +402,16 @@ sub NUKIDevice_Parse($$) {
         }
         
         if( $result eq 503 ) {
-            readingsSingleUpdate( $hash, "state", "smartlock is offline", 1 );
-            Log3 $name, 3, "NUKIDevice ($name) - smartlock is offline";
+            readingsSingleUpdate( $hash, "state", "smartlock is unavailable", 1 );
+            Log3 $name, 3, "NUKIDevice ($name) - smartlock is unavailable";
             return;
         }
     }
     
+	if( $result !~ m/^[\[{].*[}\]]$/ ) {
+        Log3 $name, 3, "NUKIDevice ($name) - invalid json detected by NUKIDevice_Parse: $result";
+        return "NUKIDevice ($name) - invalid json detected by NUKIDevice_Parse: $result";
+    }
     
     #########################################
     #### verarbeiten des JSON Strings #######
@@ -523,8 +524,8 @@ sub NUKIDevice_CGI() {
         Log3 $name, 4, "NUKIDevice ($name) - empty answer received";
         return undef;
     } elsif( $json !~ m/^[\[{].*[}\]]$/ ) {
-        Log3 $name, 3, "NUKIDevice ($name) - invalid json detected: $json";
-        return "NUKIDevice ($name) - invalid json detected: $json";
+        Log3 $name, 3, "NUKIDevice ($name) - invalid json detected by NUKIDevice_CGI: $json";
+        return "NUKIDevice ($name) - invalid json detected by NUKIDevice_CGI: $json";
     }
     
     my $decode_json = decode_json($json);

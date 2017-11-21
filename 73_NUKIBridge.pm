@@ -36,10 +36,6 @@
 
 
 ################################
-# Version 0.6.2, Nov 2017: Olaf Bock (github at github.com) 
-# - Errorhandling for HTTP 503 modified
-# - Nuki Bridge Calls serialized
-################################
 
 
 package main;
@@ -50,8 +46,8 @@ use JSON;
 
 use HttpUtils;
 
-my $version     = "0.6.2";
-my $bridgeapi   = "1.6"; # 1.6 is the same as 1.5 with respect to the here used funktions
+my $version     = "0.6.1";
+my $bridgeapi   = "1.5";
 
 
 
@@ -82,6 +78,7 @@ sub NUKIBridge_InfoProcessing($$);
 sub NUKIBridge_getLogfile($);
 sub NUKIBridge_getCallbackList($);
 sub NUKIBridge_CallBlocking($$$);
+
 
 
 
@@ -141,16 +138,13 @@ sub NUKIBridge_Define($$) {
     $hash->{VERSION}    = $version;
     $hash->{BRIDGEAPI}  = $bridgeapi;
     $hash->{helper}{aliveCount} = 0;
-	$hash->{CALLSTACK} = 0;					# New added with 0.6.2 to serialize the Bridge calls. Counter of open calls
     
 
 
     Log3 $name, 3, "NUKIBridge ($name) - defined with host $host on port $port, Token $token";
 
     $attr{$name}{room} = "NUKI" if( !defined( $attr{$name}{room} ) );
-#    $attr{$name}{event-on-change-reading} = "state" if( !defined( $attr{$name}{event-on-change-reading} ) );	# New added with 0.6.2 to trigger the notify
-# I can´t get this running. Always Bareword event not allowed while strict subs error -> Make sure to define it in the cfg file
-	readingsSingleUpdate($hash, 'state', 'Initialized', 1 );
+    readingsSingleUpdate($hash, 'state', 'Initialized', 1 );
     
     RemoveInternalTimer($hash);
     
@@ -174,9 +168,6 @@ sub NUKIBridge_Undef($$) {
     
     RemoveInternalTimer( $hash );
     
-	if( exists( $defs{'nCallReady'} ) ) {		# New added with 0.6.2. Remove eventually defined notify
-		fhem ("delete nCallReady");
-	}
     delete $modules{NUKIBridge}{defptr}{$hash->{HOST}};
     
     return undef;
@@ -237,13 +228,6 @@ sub NUKIBridge_Set($@) {
         
         return undef;
         
-    } elsif($cmd eq 'retry') {			# New added with 0.6.2. Command "retry" for processing open actions
-        return "usage: retry" if( @args != 0 );
-    
-        NUKIBridge_Call($hash,$hash,"retry",undef,undef) if( !IsDisabled($name) );
-        
-        return undef;
-        
     } elsif($cmd eq 'fwUpdate') {
         return "usage: fwUpdate" if( @args != 0 );
     
@@ -281,7 +265,7 @@ sub NUKIBridge_Set($@) {
 
     } else {
         my  $list = ""; 
-        $list .= "info:noArg autocreate:noArg retry:noArg callbackRemove:0,1,2 "; # New added with 0.6.2: retry
+        $list .= "info:noArg autocreate:noArg callbackRemove:0,1,2 ";
         $list .= "clearLog:noArg fwUpdate:noArg reboot:noArg factoryReset:noArg" if( ReadingsVal($name,'bridgeType','Software') eq 'Hardware' );
         return "Unknown argument $cmd, choose one of $list";
     }
@@ -351,18 +335,7 @@ sub NUKIBridge_Call($$$$$) {
     my $host    =   $hash->{HOST};
     my $port    =   $hash->{PORT};
     my $token   =   $hash->{TOKEN};
-	
-	my $retry = 0;					# New added with 0.6.2: Process open requests (when called by notify)
-    my $lastRequest = time;
-	if (exists ($hash->{helper}{BridgeCallStack}) and scalar @{$hash->{helper}{BridgeCallStack}} > 0) {
-		my $dummy;
-		($dummy,$dummy,$dummy,$dummy,$dummy, $lastRequest) = @{$hash->{helper}{BridgeCallStack}[0]};
-		if ($path eq 'retry') {
-			($hash,$chash,$path,$lockAction,$nukiId, $lastRequest) = @{$hash->{helper}{BridgeCallStack}[0]};
-			$retry = 1;
-			Log3 $name, 5, "NUKIBridge ($name) - retry last operation $path";
-		}
-	}
+    
     
     my $uri = "http://" . $hash->{HOST} . ":" . $port;
     $uri .= "/" . $path if( defined $path);
@@ -371,35 +344,6 @@ sub NUKIBridge_Call($$$$$) {
     $uri .= "&url=" . $lockAction if( defined($lockAction) and $path eq "callback/add" );
     $uri .= "&nukiId=" . $nukiId if( defined($nukiId) );
 
-
-	if (ReadingsVal($name,"state","connected") eq "processing..." ) { # New added with 0.6.2: state processing...
-		Log3 $name, 5, "Last request was $lastRequest". " Now is ".time;
-		if ($path eq "info" ) { # New added with 0.6.2. Info requests can be skipped if other is ongoing
-			my $timeDiff = time - $lastRequest;
-			if ($timeDiff < 60) { 
-				Log3 $name, 5, "NUKIBridge ($name) - processing other request -- skip info request";
-			} else {
-				Log3 $name, 4, "NUKIBridge ($name) - timeout last request: $timeDiff sec -- reset state";
-				readingsSingleUpdate($hash, 'state', 'connected', 1 ); # New added with 0.6.2. Just assume it is connected to trigger open request on the stack
-			}
-			return;
-		} else { # New added with 0.6.2. Real actions commands should not be skipped. Queue them on the stack
-			push (@{$hash->{helper}{BridgeCallStack}}, [$hash,$chash,$path,$lockAction,$nukiId, time]);
-			$hash->{CALLSTACK} = scalar @{$hash->{helper}{BridgeCallStack}};
-			Log3 $name, 5, "NUKIBridge ($name) - processing other request -- adding to CallStack. Stacksize ".scalar @{$hash->{helper}{BridgeCallStack}};
-			fhem ("define nCallReady notify ".$hash->{NAME}.":connected set ".$hash->{NAME}." retry");
-			Log3 $name, 5, "NUKIBridge ($name) - defined notify";
-		}
-	} else { # New added with 0.6.2. Bridge is ready. Just do what is requested
-		readingsSingleUpdate($hash, 'state', 'processing...', 1 );
-		if (!$retry) {
-			push (@{$hash->{helper}{BridgeCallStack}}, [$hash,$chash,$path,$lockAction,$nukiId, time]);
-			$hash->{CALLSTACK} = scalar @{$hash->{helper}{BridgeCallStack}};
-			Log3 $name, 5, "NUKIBridge ($name) - ready and adding request to CallStack. Stacksize ".scalar @{$hash->{helper}{BridgeCallStack}};
-		} else {
-			Log3 $name, 5, "NUKIBridge ($name) - retry w/o adding request to CallStack. Stacksize ".scalar @{$hash->{helper}{BridgeCallStack}};
-		}
-	}
 
     HttpUtils_NonblockingGet(
         {
@@ -429,7 +373,7 @@ sub NUKIBridge_Distribution($$$) {
     Log3 $name, 5, "NUKIBridge ($name) - Response JSON: $json";
     Log3 $name, 5, "NUKIBridge ($name) - Response ERROR: $err";
     Log3 $name, 5, "NUKIBridge ($name) - Response CODE: $param->{code}" if( defined($param->{code}) and ($param->{code}) );
-
+    
     readingsBeginUpdate($hash);
     
     if( defined( $err ) ) {
@@ -443,25 +387,17 @@ sub NUKIBridge_Distribution($$$) {
             readingsBulkUpdate( $hash, "lastError", $err ) if( ReadingsVal($name,"state","not connected") eq "not connected" );
             Log3 $name, 4, "NUKIBridge ($name) - error while requesting: $err";
             readingsEndUpdate( $hash, 1 );
-			if( !exists( $defs{'nCallReady'} ) ) { # New added with 0.6.2. An error occurred. Define notify to do it again
-				Log3 $name, 5, "NUKIBridge ($name) - notify not existing. Defined now.";
-				fhem ("define nCallReady notify ".$hash->{NAME}.":connected set ".$hash->{NAME}." retry");
-			}
             return $err;
         }
     }
 
-    if( $json !~ m/^[\[{].*[}\]]$/ and exists( $param->{code} ) and $param->{code} ne 200 ) {
+    if( $json eq "" and exists( $param->{code} ) and $param->{code} ne 200 ) {
     
-        if( $param->{code} eq 503 and $json ne "" ) { # New added with 0.6.2. Bridge unavailable. Define notify to do it again
-            readingsBulkUpdate( $hash, "state", "unavailable");
-            Log3 $name, 4, "NUKIBridge ($name) - Bridge is unavailable. Try again";
-			if( !exists( $defs{'nCallReady'} ) ) {
-				Log3 $name, 5, "NUKIBridge ($name) - notify not existing. Defined now.";
-				fhem ("define nCallReady notify ".$hash->{NAME}.":connected set ".$hash->{NAME}." retry");
-			}
+        if( $param->{code} eq 503 ) {
+            NUKIDevice_Parse($param->{chash},$param->{code}) if( $hash != $param->{chash} );
+            Log3 $name, 4, "NUKIBridge ($name) - smartlock is offline";
             readingsEndUpdate( $hash, 1 );
-            return "received http code ".$param->{code}.": Bridge is unavailable";
+            return "received http code ".$param->{code}.": smartlock is offline";
         }
         
         readingsBulkUpdate( $hash, "lastError", "Internal error, " .$param->{code} );
@@ -504,20 +440,7 @@ sub NUKIBridge_Distribution($$$) {
         readingsEndUpdate( $hash, 1 );
         return $param->{code};
     }
-
-	# New added with 0.6.2. Callback arrived o.k. Above code didn´t delect an error. Delete request from call stack
-	shift @{$hash->{helper}{BridgeCallStack}};
-	$hash->{CALLSTACK} = scalar @{$hash->{helper}{BridgeCallStack}};
-	Log3 $name, 5, "NUKIBridge ($name) - Request is processed ok. Deleting from CallStack. Stacksize ".scalar @{$hash->{helper}{BridgeCallStack}};
-	if (scalar @{$hash->{helper}{BridgeCallStack}} == 0) {
-		if( exists( $defs{'nCallReady'} ) ) {
-			fhem ("delete nCallReady");
-			Log3 $name, 5, "NUKIBridge ($name) - Last pending request is processed ok. Deleting notify";
-		}
-	}
-	readingsSingleUpdate( $hash, "state", "connected", 1 ); # New added with 0.6.2. Whatever arrives here is a valid response from the bridge
-
-
+    
     if( $hash == $param->{chash} ) {
         
         # zum testen da ich kein Nuki Smartlock habe

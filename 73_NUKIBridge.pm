@@ -174,9 +174,6 @@ sub NUKIBridge_Undef($$) {
     
     RemoveInternalTimer( $hash );
     
-	if( exists( $defs{'nCallReady'} ) ) {		# New added with 0.6.2. Remove eventually defined notify
-		fhem ("delete nCallReady");
-	}
     delete $modules{NUKIBridge}{defptr}{$hash->{HOST}};
     
     return undef;
@@ -346,7 +343,7 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
         Log3 $name, 4, "NUKIBridge ($name) - run NUKIBridge_Call";
     }
     
-    InternalTimer( gettimeofday()+15+int(rand(15)), 'NUKIBridge_GetCheckBridgeAlive', $hash, 1 );
+    InternalTimer( gettimeofday()+45, 'NUKIBridge_GetCheckBridgeAlive', $hash, 1 );
     
     Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
 }
@@ -359,7 +356,7 @@ sub NUKIBridge_firstRun($) {
     
     RemoveInternalTimer($hash);
     NUKIBridge_Call($hash,$hash,'list',undef,undef) if( !IsDisabled($name) );
-    InternalTimer( gettimeofday()+15, 'NUKIBridge_GetCheckBridgeAlive', $hash, 1 );
+    InternalTimer( gettimeofday()+45, 'NUKIBridge_GetCheckBridgeAlive', $hash, 1 );
 
     return undef;
 }
@@ -376,10 +373,10 @@ sub NUKIBridge_Call($$$$$) {
 	my $retry = 0;					# New added with 0.6.2: Process open requests (when called by notify)
     my $lastRequest = time;
 	if ( $hash->{CALLSTACK} > 0 ) {
-		my $dummy;
-		($dummy,$dummy,$dummy,$dummy,$dummy, $lastRequest) = @{$hash->{helper}{BridgeCallStack}[0]};
+		$lastRequest = $hash->{helper}{BridgeCallStack}[0][5];
 		if ($path eq 'retry') {
-			($hash,$chash,$path,$lockAction,$nukiId, $lastRequest) = @{$hash->{helper}{BridgeCallStack}[0]};
+			my $dummy;
+			($hash,$chash,$path,$lockAction,$nukiId, $lastRequest, $dummy) = @{$hash->{helper}{BridgeCallStack}[0]};
 			$retry = 1;
 			Log3 $name, 5, "NUKIBridge ($name) - retry last operation $path";
 		}
@@ -395,29 +392,29 @@ sub NUKIBridge_Call($$$$$) {
 
 	if (ReadingsVal($name,"state","connected") eq "processing..." ) { # New added with 0.6.2: state processing...
 		Log3 $name, 5, "Last request was $lastRequest". " Now is ".time;
-		if ($path eq "info" ) { # New added with 0.6.2. Info requests can be skipped if other is ongoing
-			my $timeDiff = time - $lastRequest;
-			if ($timeDiff < 60) { 
-				Log3 $name, 5, "NUKIBridge ($name) - processing other request -- skip $path request";
-			} else {
-				Log3 $name, 4, "NUKIBridge ($name) - timeout last request: $timeDiff sec -- reset state";
-				readingsSingleUpdate($hash, 'state', 'connected', 1 ); # New added with 0.6.2. Just assume it is connected to trigger open request on the stack
-			}
-			return;
-		} else { # New added with 0.6.2. Real actions commands should not be skipped. Queue them on the stack
-			push (@{$hash->{helper}{BridgeCallStack}}, [$hash,$chash,$path,$lockAction,$nukiId, time]);
-			$hash->{CALLSTACK} = scalar @{$hash->{helper}{BridgeCallStack}};
+		push (@{$hash->{helper}{BridgeCallStack}}, [$hash,$chash,$path,$lockAction,$nukiId, time, $uri]);
+		$hash->{CALLSTACK} = scalar @{$hash->{helper}{BridgeCallStack}};
+		if (defined($lockAction)) {
+			Log3 $name, 5, "NUKIBridge ($name) - processing other request -- adding $path $lockActions{$lockAction} to CallStack. Stacksize ".$hash->{CALLSTACK};
+		} else {
 			Log3 $name, 5, "NUKIBridge ($name) - processing other request -- adding $path to CallStack. Stacksize ".$hash->{CALLSTACK};
+		}
+		my $timeDiff = time - $lastRequest;
+		if ($timeDiff > 60) { 
+			Log3 $name, 3, "NUKIBridge ($name) - timeout last request: $timeDiff sec -- reset state";
+			readingsSingleUpdate($hash, 'state', 'connected', 1 ); # New added with 0.6.2. Just assume it is connected to trigger open request on the stack
 		}
 	} else { # New added with 0.6.2. Bridge is ready. Just do what is requested
 		readingsSingleUpdate($hash, 'state', 'processing...', 1 );
 		if (!$retry) {
-			if ($path ne "info") {
-				push (@{$hash->{helper}{BridgeCallStack}}, [$hash,$chash,$path,$lockAction,$nukiId, time]);
-				$hash->{CALLSTACK} = scalar @{$hash->{helper}{BridgeCallStack}};
-				Log3 $name, 5, "NUKIBridge ($name) - ready and adding request $path to CallStack. Stacksize ".$hash->{CALLSTACK};
+			push (@{$hash->{helper}{BridgeCallStack}}, [$hash,$chash,$path,$lockAction,$nukiId, time, $uri]);
+			$hash->{CALLSTACK} = scalar @{$hash->{helper}{BridgeCallStack}};
+			if (defined($lockAction)) {
+				Log3 $name, 5, "NUKIBridge ($name) - ready and adding request $path $lockActions{$lockAction} to CallStack. Stacksize ".$hash->{CALLSTACK};
 			} else {
-				Log3 $name, 5, "NUKIBridge ($name) - $path requests are not added to CallStack. Stacksize ".$hash->{CALLSTACK};
+				if ($path ne "info") {
+					Log3 $name, 5, "NUKIBridge ($name) - ready and adding request $path to CallStack. Stacksize ".$hash->{CALLSTACK};
+				}
 			}
 		} else {
 			Log3 $name, 5, "NUKIBridge ($name) - retry w/o adding request $path to CallStack. Stacksize ".$hash->{CALLSTACK};
@@ -480,6 +477,7 @@ sub NUKIBridge_Distribution($$$) {
         }
         
         readingsBulkUpdate( $hash, "lastError", "Internal error, " .$param->{code} );
+        readingsBulkUpdate( $hash, "state", "error".$param->{code});
         Log3 $name, 4, "NUKIBridge ($name) - received http code " .$param->{code}." without any data after requesting";
 
         readingsEndUpdate( $hash, 1 );
@@ -490,7 +488,7 @@ sub NUKIBridge_Distribution($$$) {
         
         readingsBulkUpdate( $hash, "lastError", "invalid API token" ) if( $param->{code} eq 401 );
         readingsBulkUpdate( $hash, "lastError", "action is undefined" ) if( $param->{code} eq 400 and $hash == $param->{chash} );
-        
+        readingsBulkUpdate( $hash, "state", "error");
         
         ###### Fehler bei Antwort auf Anfrage eines logischen Devices ######
         NUKIDevice_Parse($param->{chash},$param->{code}) if( $param->{code} eq 404 );
@@ -521,11 +519,16 @@ sub NUKIBridge_Distribution($$$) {
     }
 
 	# New added with 0.6.2. Callback arrived o.k. Above code didn´t detect an error. Delete request from call stack
-	# if it was not an info request. Info requests don't get saved.
-	if ($param->{endpoint} ne "info") {
+
+	if ($param->{url} eq $hash->{helper}{BridgeCallStack}[0][6]){ # nur löschen, wenn Antwort auch dem Befehl entspricht
+		if ($param->{endpoint} ne "info") {
+			my $stackSize = $hash->{CALLSTACK}-1;
+			Log3 $name, 5, "NUKIBridge ($name) - Request ".$param->{endpoint}."=".$hash->{helper}{BridgeCallStack}[0][2]." is processed ok. Deleting from CallStack. Stacksize $stackSize";
+		}
 		shift @{$hash->{helper}{BridgeCallStack}};
 		$hash->{CALLSTACK} = scalar @{$hash->{helper}{BridgeCallStack}};
-		Log3 $name, 5, "NUKIBridge ($name) - Request is processed ok. Deleting from CallStack. Stacksize ".$hash->{CALLSTACK};
+	} else {
+		Log3 $name, 5, "NUKIBridge ($name) - Request ".$param->{endpoint}."!=".$hash->{helper}{BridgeCallStack}[0][2].". Not deleting from CallStack. Stacksize ".$hash->{CALLSTACK};
 	}
 	readingsSingleUpdate( $hash, "state", "connected", 1 ); # New added with 0.6.2. Whatever arrives here is a valid response from the bridge
 

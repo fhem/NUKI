@@ -353,6 +353,9 @@ sub NUKIDevice_ReadFromNUKIBridge($@) {
     $ret = IOWrite($hash,$hash,@a);
     use strict "refs";
     return $ret;
+
+	Log3 $name, 3, "NUKIDevice ($name) - I never thought this code will be reached";
+	
     return if(IsDummy($name) || IsIgnored($name));
     my $iohash = $hash->{IODev};
     

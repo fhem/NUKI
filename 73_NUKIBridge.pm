@@ -477,7 +477,7 @@ sub NUKIBridge_ResponseProcessing($$$) {
         return "NUKIBridge ($name) - invalid json detected: $json";
     }
 
-    my $decode_json = eval{decode_json($json)};
+    $decode_json = eval{decode_json($json)};
     if($@){
         Log3 $name, 3, "NUKIBridge ($name) - JSON error while request: $@";
         return;

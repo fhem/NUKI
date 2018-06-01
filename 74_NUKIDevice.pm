@@ -135,6 +135,7 @@ sub NUKIDevice_Define($$) {
   
   
     Log3 $name, 3, "NUKIDevice ($name) - defined with Code: $code";
+    Log3 $name, 1, "NUKIDevice ($name) - reading battery a deprecated and will be remove in future";
 
     $attr{$name}{room} = "NUKI" if( !defined( $attr{$name}{room} ) );
     
@@ -447,8 +448,6 @@ sub NUKIDevice_WriteReadings($$) {
             $battery = "ok";
         } elsif ( $decode_json->{batteryCritical} eq "true" or $decode_json->{batteryCritical} == 1 ) {
             $battery = "low";
-        } else {
-            $battery = "parseError";
         }
     }
 
@@ -485,6 +484,7 @@ sub NUKIDevice_WriteReadings($$) {
         readingsBulkUpdate( $hash, "batteryCritical", $decode_json->{batteryCritical} );
         readingsBulkUpdate( $hash, "lockState", $decode_json->{stateName} );
         readingsBulkUpdate( $hash, "state", $decode_json->{stateName} );
+        readingsBulkUpdate( $hash, "stateState", $decode_json->{stateName} );
         readingsBulkUpdate( $hash, "battery", $battery );
         readingsBulkUpdate( $hash, "success", $decode_json->{success} );
         
@@ -618,7 +618,7 @@ sub NUKIDevice_CGI() {
     <li>rssi - value of rssi</li>
     <li>succes - true, false   Returns the status of the last closing command. Ok or not Ok.</li>
     <li>batteryCritical - Is the battery in a critical state? True, false</li>
-    <li>battery - battery status, ok / low</li>
+    <li>batteryState - battery status, ok / low</li>
   </ul>
   <br><br>
   <a name="NUKIDeviceset"></a>
@@ -679,7 +679,7 @@ sub NUKIDevice_CGI() {
     <li>rssi - rssi Wert des Smart Locks</li>
     <li>succes - true, false Gibt des Status des letzten Schlie&szlig;befehles wieder. Geklappt oder nicht geklappt.</li>
     <li>batteryCritical - Ist die Batterie in einem kritischen Zustand? true, false</li>
-    <li>battery - Status der Batterie, ok/low</li>
+    <li>batteryState - Status der Batterie, ok/low</li>
   </ul>
   <br><br>
   <a name="NUKIDeviceset"></a>

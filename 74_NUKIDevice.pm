@@ -484,8 +484,8 @@ sub NUKIDevice_WriteReadings($$) {
         readingsBulkUpdate( $hash, "batteryCritical", $decode_json->{batteryCritical} );
         readingsBulkUpdate( $hash, "lockState", $decode_json->{stateName} );
         readingsBulkUpdate( $hash, "state", $decode_json->{stateName} );
-        readingsBulkUpdate( $hash, "stateState", $decode_json->{stateName} );
         readingsBulkUpdate( $hash, "battery", $battery );
+        readingsBulkUpdate( $hash, "batteryState", $battery );
         readingsBulkUpdate( $hash, "success", $decode_json->{success} );
         
         readingsBulkUpdate( $hash, "name", $decode_json->{name} );

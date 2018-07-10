@@ -46,8 +46,8 @@ use JSON;
 
 use HttpUtils;
 
-my $version     = "0.6.2";
-my $bridgeapi   = "1.5";
+my $version     = "0.6.3";
+my $bridgeapi   = "1.6";
 
 
 

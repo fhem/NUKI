@@ -66,6 +66,8 @@ sub NUKIBridge_Define ($$);
 sub NUKIBridge_Undef ($$);
 sub NUKIBridge_Read($@);
 sub NUKIBridge_Attr(@);
+sub NUKIBridge_addExtension($$$);
+sub NUKIBridge_removeExtension($);
 sub NUKIBridge_Set($@);
 sub NUKIBridge_Get($@);
 sub NUKIBridge_GetCheckBridgeAlive($);
@@ -73,6 +75,7 @@ sub NUKIBridge_firstRun($);
 sub NUKIBridge_Call($$$$$);
 sub NUKIBridge_Distribution($$$);
 sub NUKIBridge_ResponseProcessing($$$);
+sub NUKIBridge_CGI();
 sub NUKIBridge_Autocreate($$;$);
 sub NUKIBridge_InfoProcessing($$);
 sub NUKIBridge_getLogfile($);
@@ -92,6 +95,7 @@ sub NUKIBridge_Initialize($) {
     $hash->{WriteFn}    = "NUKIBridge_Read";
     $hash->{Clients}    = ":NUKIDevice:";
 
+    my $webhookFWinstance   = join( ",", devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
       
     # Consumer
     $hash->{SetFn}      = "NUKIBridge_Set";
@@ -100,6 +104,8 @@ sub NUKIBridge_Initialize($) {
     $hash->{UndefFn}    = "NUKIBridge_Undef";
     $hash->{AttrFn}     = "NUKIBridge_Attr";
     $hash->{AttrList}   = "disable:1 ".
+                          "webhookFWinstance:$webhookFWinstance ".
+                          "webhookHttpHostname ".
                           $readingFnAttributes;
 
 
@@ -138,12 +144,20 @@ sub NUKIBridge_Define($$) {
     $hash->{VERSION}    = $version;
     $hash->{BRIDGEAPI}  = $bridgeapi;
     $hash->{helper}{aliveCount} = 0;
+    my $infix = "NUKIBridge";
     
 
 
     Log3 $name, 3, "NUKIBridge ($name) - defined with host $host on port $port, Token $token";
 
     $attr{$name}{room} = "NUKI" if( !defined( $attr{$name}{room} ) );
+    
+    if ( NUKIBridge_addExtension( $name, "NUKIBridge_CGI", $infix . "-" . $host ) ) {
+        $hash->{fhem}{infix} = $infix;
+    }
+
+    $hash->{WEBHOOK_REGISTER} = "unregistered";
+    
     readingsSingleUpdate($hash, 'state', 'Initialized', 1 );
     
     RemoveInternalTimer($hash);
@@ -165,6 +179,10 @@ sub NUKIBridge_Undef($$) {
     
     my $host = $hash->{HOST};
     my $name = $hash->{NAME};
+    
+    if ( defined( $hash->{fhem}{infix} ) ) {
+        NUKIBridge_removeExtension( $hash->{fhem}{infix} );
+    }
     
     RemoveInternalTimer( $hash );
     
@@ -204,8 +222,70 @@ sub NUKIBridge_Attr(@) {
             Log3 $name, 3, "NUKIBridge ($name) - delete disabledForIntervals";
         }
     }
+    
+    ######################
+    #### webhook #########
+    
+    return "Invalid value for attribute $attrName: can only by FQDN or IPv4 or IPv6 address" if ( $attrVal && $attrName eq "webhookHttpHostname" && $attrVal !~ /^([A-Za-z_.0-9]+\.[A-Za-z_.0-9]+)|[0-9:]+$/ );
+
+    return "Invalid value for attribute $attrName: FHEMWEB instance $attrVal not existing" if ( $attrVal && $attrName eq "webhookFWinstance" && ( !defined( $defs{$attrVal} ) || $defs{$attrVal}{TYPE} ne "FHEMWEB" ) );
+
+    return "Invalid value for attribute $attrName: needs to be an integer value" if ( $attrVal && $attrName eq "webhookPort" && $attrVal !~ /^\d+$/ );
+    
+    
+    
+    
+    if ( $attrName =~ /^webhook.*/ ) {
+    
+        my $webhookHttpHostname = ( $attrName eq "webhookHttpHostname" ? $attrVal : AttrVal( $name, "webhookHttpHostname", "" ) );
+        my $webhookFWinstance = ( $attrName eq "webhookFWinstance" ? $attrVal : AttrVal( $name, "webhookFWinstance", "" ) );
+        
+        $hash->{WEBHOOK_URI} = "/" . AttrVal( $webhookFWinstance, "webname", "fhem" ) . "/NUKIBridge" . "-" . $hash->{HOST};
+        $hash->{WEBHOOK_PORT} = ( $attrName eq "webhookPort" ? $attrVal : AttrVal( $name, "webhookPort", InternalVal( $webhookFWinstance, "PORT", "" )) );
+
+        $hash->{WEBHOOK_URL}     = "";
+        $hash->{WEBHOOK_COUNTER} = "0";
+        
+        if ( $webhookHttpHostname ne "" && $hash->{WEBHOOK_PORT} ne "" ) {
+        
+            $hash->{WEBHOOK_URL} = "http://" . $webhookHttpHostname . ":" . $hash->{WEBHOOK_PORT} . $hash->{WEBHOOK_URI};
+            my $url = "http://$webhookHttpHostname" . ":" . $hash->{WEBHOOK_PORT} . $hash->{WEBHOOK_URI};
+
+            Log3 $name, 3, "NUKIBridge ($name) - URL ist: $url";
+            NUKIBridge_Call($hash,$hash,"callback/add",$url,undef ) if( $init_done );
+            $hash->{WEBHOOK_REGISTER} = "sent";
+            
+        } else {
+            $hash->{WEBHOOK_REGISTER} = "incomplete_attributes";
+        }
+    }
 
     return undef;
+}
+
+sub NUKIBridge_addExtension($$$) {
+
+    my ( $name, $func, $link ) = @_;
+    my $url = "/$link";
+
+    Log3 $name, 2, "NUKIBridge ($name) - Registering NUKIBridge for webhook URI $url ...";
+    
+    $data{FWEXT}{$url}{deviceName} = $name;
+    $data{FWEXT}{$url}{FUNC}       = $func;
+    $data{FWEXT}{$url}{LINK}       = $link;
+
+    return 1;
+}
+
+sub NUKIBridge_removeExtension($) {
+    
+    my ($link) = @_;
+
+    my $url  = "/$link";
+    my $name = $data{FWEXT}{$url}{deviceName};
+    
+    Log3 $name, 2, "NUKIBridge ($name) - Unregistering NUKIBridge for webhook URL $url...";
+    delete $data{FWEXT}{$url};
 }
 
 sub NUKIBridge_Set($@) {
@@ -257,7 +337,7 @@ sub NUKIBridge_Set($@) {
         my $id = "id=" . join( " ", @args );
         
         my $resp = NUKIBridge_CallBlocking($hash,"callback/remove",$id) if( !IsDisabled($name) );
-        if( $resp->{success} eq "true" and !IsDisabled($name) ) {
+        if( ($resp->{success} eq "true" or $resp->{success} == 1) and !IsDisabled($name) ) {
             return "Success Callback $id removed";
         } else {
             return "remove Callback failed";
@@ -505,6 +585,72 @@ sub NUKIBridge_ResponseProcessing($$$) {
     }
     
     return undef;
+}
+
+sub NUKIBridge_CGI() {
+    
+    my ($request) = @_;
+    
+    my $hash;
+    my $name;
+    my $nukiId;
+    
+    # data received
+    # Testaufruf:
+    # curl --data '{"nukiId": 123456, "state": 1,"stateName": "locked", "batteryCritical": false}' http://10.6.6.20:8083/fhem/NUKIDevice-123456
+    # wget --post-data '{"nukiId": 123456, "state": 1,"stateName": "locked", "batteryCritical": false}' http://10.6.6.20:8083/fhem/NUKIDevice-123456
+    
+    
+    my $header = join("\n", @FW_httpheader);
+
+    my ($first,$json) = split("&",$request,2);
+    
+    if( !$json ) {
+        Log3 $name, 3, "NUKIBridge ($name) - empty message received";
+        return undef;
+    } elsif( $json =~ m'HTTP/1.1 200 OK' ) {
+        Log3 $name, 4, "NUKIBridge ($name) - empty answer received";
+        return undef;
+    } elsif( $json !~ m/^[\[{].*[}\]]$/ ) {
+        Log3 $name, 3, "NUKIBridge ($name) - invalid json detected: $json";
+        return "NUKIBridge ($name) - invalid json detected: $json";
+    }
+    
+    my $decode_json = eval{decode_json($json)};
+    if($@){
+        Log3 $name, 3, "NUKIBridge ($name) - JSON error while request: $@";
+        return;
+    }
+    
+    
+    if( ref($decode_json) eq "HASH" ) {
+        if ( defined( $modules{NUKIDevice}{defptr} ) ) {
+            while ( my ( $key, $value ) = each %{ $modules{NUKIDevice}{defptr} } ) {
+            
+                $hash = $modules{NUKIDevice}{defptr}{$key};
+                $name = $hash->{NAME};
+                $nukiId = InternalVal( $name, "NUKIID", undef );
+                next if ( !$nukiId or $nukiId ne $decode_json->{nukiId} );
+
+                $hash->{WEBHOOK_COUNTER}++;
+                $hash->{WEBHOOK_LAST} = TimeNow();
+
+                Log3 $name, 4, "NUKIBridge ($name) - Received webhook for matching NukiId at device $name";
+            
+                NUKIDevice_Parse($hash,$json);
+            }
+        }
+        
+        return ( undef, undef );
+    }
+    
+    # no data received
+    else {
+    
+        Log3 undef, 4, "NUKIBridge - received malformed request\n$request";
+    }
+
+    return ( "text/plain; charset=utf-8", "Call failure: " . $request );
 }
 
 sub NUKIBridge_Autocreate($$;$) {
@@ -846,6 +992,8 @@ sub NUKIBridge_CallBlocking($$$) {
   <b>Attributes</b>
   <ul>
     <li>disable - disables the Nuki Bridge</li>
+    <li>webhookFWinstance - Webinstanz of the Callback</li>
+    <li>webhookHttpHostname - IP or FQDN of the FHEM Server Callback</li>
     <br>
   </ul>
 </ul>
@@ -918,6 +1066,8 @@ sub NUKIBridge_CallBlocking($$$) {
   <b>Attribute</b>
   <ul>
     <li>disable - deaktiviert die Nuki Bridge</li>
+    <li>webhookFWinstance - zu verwendene Webinstanz für den Callbackaufruf</li>
+    <li>webhookHttpHostname - IP oder FQDN vom FHEM Server für den Callbackaufruf</li>
     <br>
   </ul>
 </ul>

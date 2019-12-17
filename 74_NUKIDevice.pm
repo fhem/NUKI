@@ -43,14 +43,11 @@ sub NUKIDevice_Initialize($);
 sub NUKIDevice_Define($$);
 sub NUKIDevice_Undef($$);
 sub NUKIDevice_Attr(@);
-sub NUKIDevice_addExtension($$$);
-sub NUKIDevice_removeExtension($);
 sub NUKIDevice_Set($$@);
 sub NUKIDevice_GetUpdate($);
 sub NUKIDevice_ReadFromNUKIBridge($@);
 sub NUKIDevice_Parse($$);
 sub NUKIDevice_WriteReadings($$);
-sub NUKIDevice_CGI();
 
 
 
@@ -65,12 +62,8 @@ sub NUKIDevice_Initialize($) {
     $hash->{UndefFn}        = "NUKIDevice_Undef";
     $hash->{AttrFn}         = "NUKIDevice_Attr";
     
-    my $webhookFWinstance   = join( ",", devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
-    
     $hash->{AttrList}       = "IODev ".
                               "disable:1 ".
-                              "webhookFWinstance:$webhookFWinstance ".
-                              "webhookHttpHostname ".
                               $readingFnAttributes;
 
 
@@ -107,8 +100,6 @@ sub NUKIDevice_Define($$) {
     $hash->{NUKIID}     = $nukiId;
     $hash->{VERSION}    = $version;
     $hash->{STATE}      = 'Initialized';
-    my $infix = "NUKIDevice";
-    
     
     AssignIoPort($hash,$iodev) if( !$hash->{IODev} );
     
@@ -139,14 +130,6 @@ sub NUKIDevice_Define($$) {
 
     $attr{$name}{room} = "NUKI" if( !defined( $attr{$name}{room} ) );
     
-    if ( NUKIDevice_addExtension( $name, "NUKIDevice_CGI", $infix ) ) {
-        $hash->{fhem}{infix} = $infix;
-    }
-
-    $hash->{WEBHOOK_REGISTER} = "unregistered";
-    
-    
-    
     if( $init_done ) {
         InternalTimer( gettimeofday()+int(rand(10)), "NUKIDevice_GetUpdate", $hash, 0 );
     } else {
@@ -162,11 +145,6 @@ sub NUKIDevice_Undef($$) {
     
     my $nukiId = $hash->{NUKIID};
     my $name = $hash->{NAME};
-    
-    
-    if ( defined( $hash->{fhem}{infix} ) ) {
-        NUKIDevice_removeExtension( $hash->{fhem}{infix} );
-    }
     
     RemoveInternalTimer($hash);
 
@@ -208,72 +186,7 @@ sub NUKIDevice_Attr(@) {
         }
     }
     
-    ######################
-    #### webhook #########
-    
-    return "Invalid value for attribute $attrName: can only by FQDN or IPv4 or IPv6 address" if ( $attrVal && $attrName eq "webhookHttpHostname" && $attrVal !~ /^([A-Za-z_.0-9]+\.[A-Za-z_.0-9]+)|[0-9:]+$/ );
-
-    return "Invalid value for attribute $attrName: FHEMWEB instance $attrVal not existing" if ( $attrVal && $attrName eq "webhookFWinstance" && ( !defined( $defs{$attrVal} ) || $defs{$attrVal}{TYPE} ne "FHEMWEB" ) );
-
-    return "Invalid value for attribute $attrName: needs to be an integer value" if ( $attrVal && $attrName eq "webhookPort" && $attrVal !~ /^\d+$/ );
-    
-    
-    
-    
-    if ( $attrName =~ /^webhook.*/ ) {
-    
-        my $webhookHttpHostname = ( $attrName eq "webhookHttpHostname" ? $attrVal : AttrVal( $name, "webhookHttpHostname", "" ) );
-        my $webhookFWinstance = ( $attrName eq "webhookFWinstance" ? $attrVal : AttrVal( $name, "webhookFWinstance", "" ) );
-        
-        $hash->{WEBHOOK_URI} = "/" . AttrVal( $webhookFWinstance, "webname", "fhem" ) . "/NUKIDevice";
-        $hash->{WEBHOOK_PORT} = ( $attrName eq "webhookPort" ? $attrVal : AttrVal( $name, "webhookPort", InternalVal( $webhookFWinstance, "PORT", "" )) );
-
-        $hash->{WEBHOOK_URL}     = "";
-        $hash->{WEBHOOK_COUNTER} = "0";
-        
-        if ( $webhookHttpHostname ne "" && $hash->{WEBHOOK_PORT} ne "" ) {
-        
-            $hash->{WEBHOOK_URL} = "http://" . $webhookHttpHostname . ":" . $hash->{WEBHOOK_PORT} . $hash->{WEBHOOK_URI} . "-" . $hash->{NUKIID};
-            my $url = "http://$webhookHttpHostname" . ":" . $hash->{WEBHOOK_PORT} . $hash->{WEBHOOK_URI} . "-" . $hash->{NUKIID};
-
-            Log3 $name, 3, "NUKIDevice ($name) - URL ist: $url";
-            NUKIDevice_ReadFromNUKIBridge($hash,"callback/add",$url,undef ) if( $init_done );
-            $hash->{WEBHOOK_REGISTER} = "sent";
-            
-        } else {
-            $hash->{WEBHOOK_REGISTER} = "incomplete_attributes";
-        }
-    }
-    
     return undef;
-}
-
-sub NUKIDevice_addExtension($$$) {
-
-    my ( $name, $func, $link ) = @_;
-    my $url = "/$link";
-
-    
-    return 0 if ( defined( $data{FWEXT}{$url} ) && $data{FWEXT}{$url}{deviceName} ne $name );
-
-    Log3 $name, 2, "NUKIDevice ($name) - Registering NUKIDevice for webhook URI $url ...";
-    
-    $data{FWEXT}{$url}{deviceName} = $name;
-    $data{FWEXT}{$url}{FUNC}       = $func;
-    $data{FWEXT}{$url}{LINK}       = $link;
-
-    return 1;
-}
-
-sub NUKIDevice_removeExtension($) {
-    
-    my ($link) = @_;
-
-    my $url  = "/$link";
-    my $name = $data{FWEXT}{$url}{deviceName};
-    
-    Log3 $name, 2, "NUKIDevice ($name) - Unregistering NUKIDevice for webhook URL $url...";
-    delete $data{FWEXT}{$url};
 }
 
 sub NUKIDevice_Set($$@) {
@@ -499,73 +412,6 @@ sub NUKIDevice_WriteReadings($$) {
     return undef;
 }
 
-sub NUKIDevice_CGI() {
-
-    my ($request) = @_;
-    
-    my $hash;
-    my $name;
-    my $nukiId;
-    
-    
-    # data received
-    # Testaufruf:
-    # curl --data '{"nukiId": 123456, "state": 1,"stateName": "locked", "batteryCritical": false}' http://10.6.6.20:8083/fhem/NUKIDevice-123456
-    # wget --post-data '{"nukiId": 123456, "state": 1,"stateName": "locked", "batteryCritical": false}' http://10.6.6.20:8083/fhem/NUKIDevice-123456
-    
-    
-    my $header = join("\n", @FW_httpheader);
-
-    my ($first,$json) = split("&",$request,2);
-    
-    if( !$json ) {
-        Log3 $name, 3, "NUKIDevice ($name) - empty answer received";
-        return undef;
-    } elsif( $json =~ m'HTTP/1.1 200 OK' ) {
-        Log3 $name, 4, "NUKIDevice ($name) - empty answer received";
-        return undef;
-    } elsif( $json !~ m/^[\[{].*[}\]]$/ ) {
-        Log3 $name, 3, "NUKIDevice ($name) - invalid json detected: $json";
-        return "NUKIDevice ($name) - invalid json detected: $json";
-    }
-
-    my $decode_json = eval{decode_json($json)};
-    if($@){
-        Log3 $name, 3, "NUKIDevice ($name) - JSON error while request: $@";
-        return;
-    }
-    
-    
-    if( ref($decode_json) eq "HASH" ) {
-        if ( defined( $modules{NUKIDevice}{defptr} ) ) {
-            while ( my ( $key, $value ) = each %{ $modules{NUKIDevice}{defptr} } ) {
-
-                $hash = $modules{NUKIDevice}{defptr}{$key};
-                $name = $hash->{NAME};
-                $nukiId = InternalVal( $name, "NUKIID", undef );
-                next if ( !$nukiId or $nukiId ne $decode_json->{nukiId} );
-
-                $hash->{WEBHOOK_COUNTER}++;
-                $hash->{WEBHOOK_LAST} = TimeNow();
-
-                Log3 $name, 4, "NUKIDevice ($name) - Received webhook for matching NukiId at device $name";
-            
-                NUKIDevice_Parse($hash,$json);
-            }
-        }
-        
-        return ( undef, undef );
-    }
-    
-    # no data received
-    else {
-    
-        Log3 undef, 4, "NUKIDevice - received malformed request\n$request";
-    }
-
-    return ( "text/plain; charset=utf-8", "Call failure: " . $request );
-}
-
 
 
 
@@ -636,8 +482,6 @@ sub NUKIDevice_CGI() {
   <b>Attributes</b>
   <ul>
     <li>disable - disables the Nuki device</li>
-    <li>webhookFWinstance - Webinstanz of the Callback</li>
-    <li>webhookHttpHostname - IP or FQDN of the FHEM Server Callback</li>
     <br>
   </ul>
 </ul>
@@ -697,8 +541,6 @@ sub NUKIDevice_CGI() {
   <b>Attribute</b>
   <ul>
     <li>disable - deaktiviert das Nuki Device</li>
-    <li>webhookFWinstance - zu verwendene Webinstanz für den Callbackaufruf</li>
-    <li>webhookHttpHostname - IP oder FQDN vom FHEM Server für den Callbackaufruf</li>
     <br>
   </ul>
 </ul>

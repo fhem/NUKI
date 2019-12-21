@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 
 
-my $version = "0.6.4";
+my $version = "0.6.5";
 
 
 
@@ -86,18 +86,19 @@ sub NUKIDevice_Define($$) {
     foreach my $param ( @a ) {
         if( $param =~ m/IODev=([^\s]*)/ ) {
             $iodev = $1;
-            splice( @a, $i, 3 );
+            splice( @a, $i, 1 );
             last;
         }
         
         $i++;
     }
 
-    return "too few parameters: define <name> NUKIDevice <nukiId>" if( @a < 2 );
+    return "too few parameters: define <name> NUKIDevice <nukiId> <deviceType>" if( @a < 2 );
 
-    my ($name,$nukiId)  = @a;
+    my ($name,$nukiId,$deviceType)  = @a;
 
     $hash->{NUKIID}     = $nukiId;
+    $hash->{DEVICETYPE} = (defined $deviceType) ? $deviceType : 0;
     $hash->{VERSION}    = $version;
     $hash->{STATE}      = 'Initialized';
     
@@ -203,33 +204,40 @@ sub NUKIDevice_Set($$@) {
         NUKIDevice_GetUpdate($hash);
         return undef;
         
-    } elsif( $cmd eq 'lock' ) {
+    } elsif( $cmd eq 'lock' or $cmd eq 'deactivateRto' ) {
         $lockAction = $cmd;
 
-    } elsif( $cmd eq 'unlock' ) {
+    } elsif( $cmd eq 'unlock' or $cmd eq 'activateRto' ) {
         $lockAction = $cmd;
         
-    } elsif( $cmd eq 'unlatch' ) {
+    } elsif( $cmd eq 'unlatch' or $cmd eq 'electricStrikeActuation' ) {
         $lockAction = $cmd;
         
-    } elsif( $cmd eq 'locknGo' ) {
+    } elsif( $cmd eq 'locknGo' or $cmd eq 'activateContinuousMode' ) {
         $lockAction = $cmd;
         
-    } elsif( $cmd eq 'locknGoWithUnlatch' ) {
+    } elsif( $cmd eq 'locknGoWithUnlatch' or $cmd eq 'deactivateContinuousMode' ) {
         $lockAction = $cmd;
     
     } elsif( $cmd eq 'unpair' ) {
         
-        NUKIDevice_ReadFromNUKIBridge($hash,"$cmd",undef,$hash->{NUKIID} ) if( !IsDisabled($name) );
+        NUKIDevice_ReadFromNUKIBridge($hash,"$cmd",undef,$hash->{NUKIID},$hash->{DEVICETYPE} ) if( !IsDisabled($name) );
         return undef;
     
     } else {
-        my  $list = "statusRequest:noArg unlock:noArg lock:noArg unlatch:noArg locknGo:noArg locknGoWithUnlatch:noArg unpair:noArg";
+        my $list = '';
+        
+        if ( $hash->{DEVICETYPE} == 0 ) {
+            $list= "statusRequest:noArg unlock:noArg lock:noArg unlatch:noArg locknGo:noArg locknGoWithUnlatch:noArg unpair:noArg";
+        } elsif ( $hash->{DEVICETYPE} == 2 ) {
+            $list= "statusRequest:noArg activateRto:noArg deactivateRto:noArg electricStrikeActuation:noArg activateContinuousMode:noArg deactivateContinuousMode:noArg unpair:noArg";
+        }
+        
         return "Unknown argument $cmd, choose one of $list";
     }
     
     $hash->{helper}{lockAction} = $lockAction;
-    NUKIDevice_ReadFromNUKIBridge($hash,"lockAction",$lockAction,$hash->{NUKIID} ) if( !IsDisabled($name) );
+    NUKIDevice_ReadFromNUKIBridge($hash,"lockAction",$lockAction,$hash->{NUKIID},$hash->{DEVICETYPE} ) if( !IsDisabled($name) );
     
     return undef;
 }
@@ -241,7 +249,7 @@ sub NUKIDevice_GetUpdate($) {
     
     RemoveInternalTimer($hash);
     
-    NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} ) if( !IsDisabled($name) );
+    NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID}, $hash->{DEVICETYPE} ) if( !IsDisabled($name) );
     Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call NUKIDevice_ReadFromNUKIBridge" if( !IsDisabled($name) );
 
     return undef;
@@ -435,17 +443,19 @@ sub NUKIDevice_WriteReadings($$) {
 <ul>
   <u><b>NUKIDevice - Controls the Nuki Smartlock</b></u>
   <br>
-  The Nuki module connects FHEM over the Nuki Bridge with a Nuki Smartlock. After that, it´s possible to lock and unlock the Smartlock.<br>
+  The Nuki module connects FHEM over the Nuki Bridge with a Nuki Smartlock or Nuki Opener. After that, it´s possible to lock and unlock the Smartlock.<br>
   Normally the Nuki devices are automatically created by the bridge module.
   <br><br>
   <a name="NUKIDevicedefine"></a>
   <b>Define</b>
   <ul><br>
-    <code>define &lt;name&gt; NUKIDevice &lt;Nuki-Id&gt; &lt;IODev-Device&gt;</code>
+    <code>define &lt;name&gt; NUKIDevice &lt;Nuki-Id&gt; &lt;IODev-Device&gt; &lt;Device-Type&gt;</code>
+    <br><br>
+    Device-Type is 0 for the Smartlock and 2 for the Opener.
     <br><br>
     Example:
     <ul><br>
-      <code>define Frontdoor NUKIDevice 1 NBridge1</code><br>
+      <code>define Frontdoor NUKIDevice 1 NBridge1 0</code><br>
     </ul>
     <br>
     This statement creates a NUKIDevice with the name Frontdoor, the NukiId 1 and the IODev device NBridge1.<br>
@@ -494,17 +504,19 @@ sub NUKIDevice_WriteReadings($$) {
 <ul>
   <u><b>NUKIDevice - Steuert das Nuki Smartlock</b></u>
   <br>
-  Das Nuki Modul verbindet FHEM über die Nuki Bridge  mit einem Nuki Smartlock. Es ist dann m&ouml;glich das Schloss zu ver- und entriegeln.<br>
+  Das Nuki Modul verbindet FHEM über die Nuki Bridge  mit einem Nuki Smartlock oder Nuki Opener. Es ist dann m&ouml;glich das Schloss zu ver- und entriegeln.<br>
   In der Regel werden die Nuki Devices automatisch durch das Bridgemodul angelegt.
   <br><br>
   <a name="NUKIDevicedefine"></a>
   <b>Define</b>
   <ul><br>
-    <code>define &lt;name&gt; NUKIDevice &lt;Nuki-Id&gt; &lt;IODev-Device&gt;</code>
+    <code>define &lt;name&gt; NUKIDevice &lt;Nuki-Id&gt; &lt;IODev-Device&gt; &lt;Device-Type&gt;</code>
+    <br><br>
+    Device-Type ist 0 f&uuml;r das Smartlock und 2 f&üuml;r den Opener.
     <br><br>
     Beispiel:
     <ul><br>
-      <code>define Haust&uuml;r NUKIDevice 1 NBridge1</code><br>
+      <code>define Haust&uuml;r NUKIDevice 1 NBridge1 0</code><br>
     </ul>
     <br>
     Diese Anweisung erstellt ein NUKIDevice mit Namen Haust&uuml;r, der NukiId 1 sowie dem IODev Device NBridge1.<br>

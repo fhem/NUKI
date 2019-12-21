@@ -46,17 +46,25 @@ use JSON;
 
 use HttpUtils;
 
-my $version     = "0.6.4";
-my $bridgeapi   = "1.6";
+my $version     = "0.6.5";
+my $bridgeapi   = "1.9";
 
 
 
-my %lockActions = (
-    'unlock'                => 1,
-    'lock'                  => 2,
-    'unlatch'               => 3,
-    'locknGo'               => 4,
-    'locknGoWithUnlatch'    => 5
+my %lockActionsSmartLock = (
+    'unlock'                   => 1,
+    'lock'                     => 2,
+    'unlatch'                  => 3,
+    'locknGo'                  => 4,
+    'locknGoWithUnlatch'       => 5
+);
+
+my %lockActionsOpener = (
+    'activateRto'              => 1,
+    'deactivateRto'            => 2,
+    'electricStrikeActuation'  => 3,
+    'activateContinuousMode'   => 4,
+    'deactivateContinuousMode' => 5
 );
 
 
@@ -72,7 +80,7 @@ sub NUKIBridge_Set($@);
 sub NUKIBridge_Get($@);
 sub NUKIBridge_GetCheckBridgeAlive($);
 sub NUKIBridge_firstRun($);
-sub NUKIBridge_Call($$$$$);
+sub NUKIBridge_Call($$$$$$);
 sub NUKIBridge_Distribution($$$);
 sub NUKIBridge_ResponseProcessing($$$);
 sub NUKIBridge_CGI();
@@ -117,8 +125,8 @@ sub NUKIBridge_Initialize($) {
 
 sub NUKIBridge_Read($@) {
 
-  my ($hash,$chash,$name,$path,$lockAction,$nukiId)= @_;
-  NUKIBridge_Call($hash,$chash,$path,$lockAction,$nukiId );
+  my ($hash,$chash,$name,$path,$lockAction,$nukiId,$deviceType)= @_;
+  NUKIBridge_Call($hash,$chash,$path,$lockAction,$nukiId,$deviceType );
   
 }
 
@@ -252,7 +260,7 @@ sub NUKIBridge_Attr(@) {
             my $url = "http://$webhookHttpHostname" . ":" . $hash->{WEBHOOK_PORT} . $hash->{WEBHOOK_URI};
 
             Log3 $name, 3, "NUKIBridge ($name) - URL ist: $url";
-            NUKIBridge_Call($hash,$hash,"callback/add",$url,undef ) if( $init_done );
+            NUKIBridge_Call($hash,$hash,"callback/add",$url,undef,undef ) if( $init_done );
             $hash->{WEBHOOK_REGISTER} = "sent";
             
         } else {
@@ -297,14 +305,14 @@ sub NUKIBridge_Set($@) {
     if($cmd eq 'autocreate') {
         return "usage: autocreate" if( @args != 0 );
 
-        NUKIBridge_Call($hash,$hash,"list",undef,undef) if( !IsDisabled($name) );
+        NUKIBridge_Call($hash,$hash,"list",undef,undef,undef) if( !IsDisabled($name) );
 
         return undef;
 
     } elsif($cmd eq 'info') {
         return "usage: statusRequest" if( @args != 0 );
     
-        NUKIBridge_Call($hash,$hash,"info",undef,undef) if( !IsDisabled($name) );
+        NUKIBridge_Call($hash,$hash,"info",undef,undef,undef) if( !IsDisabled($name) );
         
         return undef;
         
@@ -384,7 +392,7 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
     
     if( !IsDisabled($name) ) {
 
-        NUKIBridge_Call($hash,$hash,'info',undef,undef);
+        NUKIBridge_Call($hash,$hash,'info',undef,undef,undef);
     
         Log3 $name, 4, "NUKIBridge ($name) - run NUKIBridge_Call";
     }
@@ -401,15 +409,15 @@ sub NUKIBridge_firstRun($) {
     
     
     RemoveInternalTimer($hash);
-    NUKIBridge_Call($hash,$hash,'list',undef,undef) if( !IsDisabled($name) );
+    NUKIBridge_Call($hash,$hash,'list',undef,undef,undef) if( !IsDisabled($name) );
     InternalTimer( gettimeofday()+15, 'NUKIBridge_GetCheckBridgeAlive', $hash, 1 );
 
     return undef;
 }
 
-sub NUKIBridge_Call($$$$$) {
+sub NUKIBridge_Call($$$$$$) {
 
-    my ($hash,$chash,$path,$lockAction,$nukiId) = @_;
+    my ($hash,$chash,$path,$lockAction,$nukiId,$deviceType) = @_;
     
     my $name    =   $hash->{NAME};
     my $host    =   $hash->{HOST};
@@ -420,9 +428,11 @@ sub NUKIBridge_Call($$$$$) {
     my $uri = "http://" . $hash->{HOST} . ":" . $port;
     $uri .= "/" . $path if( defined $path);
     $uri .= "?token=" . $token if( defined($token) );
-    $uri .= "&action=" . $lockActions{$lockAction} if( defined($lockAction) and $path ne "callback/add" );
+    $uri .= "&action=" . $lockActionsSmartLock{$lockAction} if( defined($lockAction) and $path ne "callback/add" and $chash->{DEVICETYPE} == 0 );
+    $uri .= "&action=" . $lockActionsOpener{$lockAction}    if( defined($lockAction) and $path ne "callback/add" and $chash->{DEVICETYPE} == 2 );
     $uri .= "&url=" . $lockAction if( defined($lockAction) and $path eq "callback/add" );
     $uri .= "&nukiId=" . $nukiId if( defined($nukiId) );
+    $uri .= "&deviceType=" . $deviceType if( defined($deviceType) );
 
 
     HttpUtils_NonblockingGet(
@@ -566,7 +576,7 @@ sub NUKIBridge_ResponseProcessing($$$) {
     if( ref($decode_json) eq "ARRAY" and scalar(@{$decode_json}) > 0 and $path eq "list" ) {
 
         NUKIBridge_Autocreate($hash,$decode_json);
-        NUKIBridge_Call($hash,$hash,"info",undef,undef) if( !IsDisabled($name) );
+        NUKIBridge_Call($hash,$hash,"info",undef,undef,undef) if( !IsDisabled($name) );
     }
     
     elsif( $path eq "info" ) {
@@ -616,6 +626,8 @@ sub NUKIBridge_CGI() {
         return "NUKIBridge ($name) - invalid json detected: $json";
     }
     
+    Log3 $name, 5, "NUKIBridge ($name) - Webhook received with JSON: $json";
+ 
     my $decode_json = eval{decode_json($json)};
     if($@){
         Log3 $name, 3, "NUKIBridge ($name) - JSON error while request: $@";
@@ -624,6 +636,9 @@ sub NUKIBridge_CGI() {
     
     
     if( ref($decode_json) eq "HASH" ) {
+        $hash->{WEBHOOK_COUNTER}++;
+        $hash->{WEBHOOK_LAST} = TimeNow();
+        
         if ( defined( $modules{NUKIDevice}{defptr} ) ) {
             while ( my ( $key, $value ) = each %{ $modules{NUKIDevice}{defptr} } ) {
             
@@ -632,8 +647,6 @@ sub NUKIBridge_CGI() {
                 $nukiId = InternalVal( $name, "NUKIID", undef );
                 next if ( !$nukiId or $nukiId ne $decode_json->{nukiId} );
 
-                $hash->{WEBHOOK_COUNTER}++;
-                $hash->{WEBHOOK_LAST} = TimeNow();
 
                 Log3 $name, 4, "NUKIBridge ($name) - Received webhook for matching NukiId at device $name";
             
@@ -668,6 +681,7 @@ sub NUKIBridge_Autocreate($$;$) {
     my $autocreated = 0;
     my $nukiSmartlock;
     my $nukiId;
+    my $nukiType;
     my $nukiName;
     
     readingsBeginUpdate($hash);
@@ -675,6 +689,7 @@ sub NUKIBridge_Autocreate($$;$) {
     foreach $nukiSmartlock (@{$decode_json}) {
         
         $nukiId     = $nukiSmartlock->{nukiId};
+        $nukiType   = $nukiSmartlock->{deviceType};
         $nukiName   = $nukiSmartlock->{name};
         
         
@@ -685,7 +700,8 @@ sub NUKIBridge_Autocreate($$;$) {
         }
         
         my $devname = "NUKIDevice" . $nukiId;
-        my $define= "$devname NUKIDevice $nukiId IODev=$name";
+        my $define= "$devname NUKIDevice $nukiId IODev=$name $nukiType";
+        
         Log3 $name, 3, "NUKIDevice ($name) - create new device '$devname' for address '$nukiId'";
 
         my $cmdret= CommandDefine(undef,$define);

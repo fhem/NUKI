@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 
 
-my $version = "0.7.3";
+my $version = "0.7.9";
 
 
 
@@ -65,7 +65,7 @@ sub NUKIDevice_Initialize($) {
 
     my ($hash) = @_;
     
-    $hash->{Match} = '^{"deviceType".*';
+    $hash->{Match} = '^{.*}$';
 
     $hash->{SetFn}          = "NUKIDevice_Set";
     $hash->{DefFn}          = "NUKIDevice_Define";
@@ -225,7 +225,8 @@ sub NUKIDevice_Set($$@) {
     
     } elsif( $cmd eq 'unpair' ) {
         
-        NUKIDevice_ReadFromNUKIBridge($hash,"$cmd",undef,$hash->{NUKIID},$hash->{DEVICETYPE} ) if( !IsDisabled($name) );
+#         NUKIDevice_ReadFromNUKIBridge($hash,"$cmd",undef,$hash->{NUKIID},$hash->{DEVICETYPE} ) if( !IsDisabled($name) );
+        IOWrite($hash,"$cmd",undef,$hash->{NUKIID},$hash->{DEVICETYPE}) if( !IsDisabled($name) );
         return undef;
     
     } else {
@@ -241,7 +242,8 @@ sub NUKIDevice_Set($$@) {
     }
     
     $hash->{helper}{lockAction} = $lockAction;
-    NUKIDevice_ReadFromNUKIBridge($hash,"lockAction",$lockAction,$hash->{NUKIID},$hash->{DEVICETYPE} ) if( !IsDisabled($name) );
+    IOWrite($hash,"lockAction",$lockAction,$hash->{NUKIID},$hash->{DEVICETYPE});
+#     NUKIDevice_ReadFromNUKIBridge($hash,"lockAction",$lockAction,$hash->{NUKIID},$hash->{DEVICETYPE} ) if( !IsDisabled($name) );
     
     return undef;
 }
@@ -253,8 +255,9 @@ sub NUKIDevice_GetUpdate($) {
     
     RemoveInternalTimer($hash);
     
-    NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID}, $hash->{DEVICETYPE} ) if( !IsDisabled($name) );
-    Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call NUKIDevice_ReadFromNUKIBridge" if( !IsDisabled($name) );
+#     NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID}, $hash->{DEVICETYPE} ) if( !IsDisabled($name) );
+    IOWrite($hash, "lockState", undef, $hash->{NUKIID}, $hash->{DEVICETYPE} ) if( !IsDisabled($name) );
+    Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call IOWrite" if( !IsDisabled($name) );
 
     return undef;
 }
@@ -357,7 +360,7 @@ sub NUKIDevice_Parse($$) {
         if ( my $hash = $modules{NUKIDevice}{defptr}{$nukiId} ) {
             my $name = $hash->{NAME};
 
-            WriteReadings( $hash, $decode_json );
+            NUKIDevice_WriteReadings( $hash, $decode_json );
             Log3 $name, 4,
               "NUKIDevice ($name) - find logical device: $hash->{NAME}";
 
@@ -379,7 +382,7 @@ sub NUKIDevice_Parse($$) {
 
     Log3 $name, 5, "NUKIDevice ($name) - parse status message for $name";
     
-#     NUKIDevice_WriteReadings($hash,$decode_json);
+    NUKIDevice_WriteReadings($hash,$decode_json);
 }
 
 sub NUKIDevice_WriteReadings($$) {
@@ -413,12 +416,14 @@ sub NUKIDevice_WriteReadings($$) {
         
             $state = $hash->{helper}{lockAction};
             $lockState = $hash->{helper}{lockAction};
-            NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} ) if( ReadingsVal($hash->{IODev}->{NAME},'bridgeType','Software') eq 'Software' );
+#             NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} ) if( ReadingsVal($hash->{IODev}->{NAME},'bridgeType','Software') eq 'Software' );
+            IOWrite($hash, "lockState", undef, $hash->{NUKIID} ) if( ReadingsVal($hash->{IODev}->{NAME},'bridgeType','Software') eq 'Software' );
             
         } elsif ( defined($decode_json->{success}) and ($decode_json->{success} eq "false" or $decode_json->{success} eq "0") ) {
         
             $state = "error";
-            NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
+#             NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
+            IOWrite($hash, "lockState", undef, $hash->{NUKIID}, $hash->{DEVICETYPE} );
         }
 
         readingsBulkUpdate( $hash, "state", $state );

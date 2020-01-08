@@ -33,7 +33,7 @@ use warnings;
 use JSON;
 
 
-my $version = "0.6.5";
+my $version = "0.7.3";
 
 
 
@@ -50,19 +50,31 @@ sub NUKIDevice_Parse($$);
 sub NUKIDevice_WriteReadings($$);
 
 
+my %deviceTypes = (
+    0 => 'smartlock',
+    2 => 'opener'
+);
+
+my %deviceTypeIds = reverse(%deviceTypes);
+
+
 
 
 
 sub NUKIDevice_Initialize($) {
 
     my ($hash) = @_;
+    
+    $hash->{Match} = '^{"deviceType".*';
 
     $hash->{SetFn}          = "NUKIDevice_Set";
     $hash->{DefFn}          = "NUKIDevice_Define";
     $hash->{UndefFn}        = "NUKIDevice_Undef";
     $hash->{AttrFn}         = "NUKIDevice_Attr";
+    $hash->{ParseFn}        = 'NUKIDevice_Parse';
     
     $hash->{AttrList}       = "IODev ".
+                              "model:opener,smartlock ".
                               "disable:1 ".
                               $readingFnAttributes;
 
@@ -77,65 +89,59 @@ sub NUKIDevice_Initialize($) {
 sub NUKIDevice_Define($$) {
 
     my ( $hash, $def ) = @_;
-    
-    my @a = split( "[ \t]+", $def );
-    splice( @a, 1, 1 );
-    my $iodev;
-    my $i = 0;
-    
-    foreach my $param ( @a ) {
-        if( $param =~ m/IODev=([^\s]*)/ ) {
-            $iodev = $1;
-            splice( @a, $i, 1 );
-            last;
-        }
-        
-        $i++;
-    }
+    my @a = split( '[ \t][ \t]*', $def );
 
     return "too few parameters: define <name> NUKIDevice <nukiId> <deviceType>" if( @a < 2 );
 
-    my ($name,$nukiId,$deviceType)  = @a;
+
+    my $name            = $a[0];
+    my $nukiId          = $a[2];
+    my $deviceType      = (defined $a[3]) ? $a[3] : 0;
 
     $hash->{NUKIID}     = $nukiId;
     $hash->{DEVICETYPE} = (defined $deviceType) ? $deviceType : 0;
     $hash->{VERSION}    = $version;
     $hash->{STATE}      = 'Initialized';
-    
-    AssignIoPort($hash,$iodev) if( !$hash->{IODev} );
-    
-    if(defined($hash->{IODev}->{NAME})) {
-    
-        Log3 $name, 3, "NUKIDevice ($name) - I/O device is " . $hash->{IODev}->{NAME};
-    } else {
-    
+
+
+    my $iodev = AttrVal( $name, 'IODev', 'none' );
+
+    AssignIoPort( $hash, $iodev ) if ( !$hash->{IODev} );
+
+    if ( defined( $hash->{IODev}->{NAME} ) ) {
+        Log3 $name, 3, "NUKIDevice ($name) - I/O device is "
+          . $hash->{IODev}->{NAME};
+    }
+    else {
         Log3 $name, 1, "NUKIDevice ($name) - no I/O device";
     }
-    
+
     $iodev = $hash->{IODev}->{NAME};
 
-    
-    my $code = $hash->{NUKIID};
-    $code = $iodev ."-". $code if( defined($iodev) );
-    my $d = $modules{NUKIDevice}{defptr}{$code};
-    return "NUKIDevice device $hash->{NUKIID} on NUKIBridge $iodev already defined as $d->{NAME}."
-        if( defined($d)
-            && $d->{IODev} == $hash->{IODev}
-            && $d->{NAME} ne $name );
+    my $d = $modules{NUKIDevice}{defptr}{$nukiId};
 
-    $modules{NUKIDevice}{defptr}{$code} = $hash;
+    return
+"NUKIDevice device $name on GardenaSmartBridge $iodev already defined."
+      if (  defined($d)
+        and $d->{IODev} == $hash->{IODev}
+        and $d->{NAME} ne $name );
   
   
-    Log3 $name, 3, "NUKIDevice ($name) - defined with Code: $code";
+    Log3 $name, 3, "NUKIDevice ($name) - defined with NukiId: $nukiId";
     Log3 $name, 1, "NUKIDevice ($name) - reading battery a deprecated and will be remove in future";
 
-    $attr{$name}{room} = "NUKI" if( !defined( $attr{$name}{room} ) );
+    CommandAttr(undef,$name . ' room NUKI')
+      if ( AttrVal($name,'room','none') eq 'none');
+    CommandAttr(undef,$name . ' model ' . $deviceTypes{$deviceType})
+      if ( AttrVal($name,'model','none') eq 'none');
     
     if( $init_done ) {
         InternalTimer( gettimeofday()+int(rand(10)), "NUKIDevice_GetUpdate", $hash, 0 );
     } else {
         InternalTimer( gettimeofday()+15+int(rand(5)), "NUKIDevice_GetUpdate", $hash, 0 );
     }
+    
+    $modules{NUKIDevice}{defptr}{$nukiId} = $hash;
 
     return undef;
 }
@@ -149,10 +155,8 @@ sub NUKIDevice_Undef($$) {
     
     RemoveInternalTimer($hash);
 
-    my $code = $hash->{NUKIID};
-    $code = $hash->{IODev}->{NAME} ."-". $code if( defined($hash->{IODev}->{NAME}) );
-    Log3 $name, 3, "NUKIDevice ($name) - undefined with Code: $code";
-    delete($modules{NUKIDevice}{defptr}{$code});
+    Log3 $name, 3, "NUKIDevice ($name) - undefined with NukiId: $nukiId";
+    delete($modules{NUKIDevice}{defptr}{$nukiId});
 
     return undef;
 }
@@ -345,10 +349,37 @@ sub NUKIDevice_Parse($$) {
         Log3 $name, 2, "NUKIDevice ($name) - got wrong status message for $name: $decode_json";
         return undef;
     }
+    
+    elsif ( defined( $decode_json->{nukiId} ) ) {
+
+        my $nukiId = $decode_json->{nukiId};
+
+        if ( my $hash = $modules{NUKIDevice}{defptr}{$nukiId} ) {
+            my $name = $hash->{NAME};
+
+            WriteReadings( $hash, $decode_json );
+            Log3 $name, 4,
+              "NUKIDevice ($name) - find logical device: $hash->{NAME}";
+
+            return $hash->{NAME};
+
+        }
+        else {
+
+            Log3 $name, 3,
+                "NUKIDevice ($name) - autocreate new device "
+              . makeDeviceName( $decode_json->{name} )
+              . " with nukiId $decode_json->{nukiId}, model $decode_json->{deviceType}";
+            return
+                "UNDEFINED "
+              . makeDeviceName( $decode_json->{name} )
+              . " NUKIDevice $decode_json->{nukiId} $decode_json->{deviceType}";
+        }
+    }
 
     Log3 $name, 5, "NUKIDevice ($name) - parse status message for $name";
     
-    NUKIDevice_WriteReadings($hash,$decode_json);
+#     NUKIDevice_WriteReadings($hash,$decode_json);
 }
 
 sub NUKIDevice_WriteReadings($$) {

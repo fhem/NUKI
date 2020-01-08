@@ -2,7 +2,7 @@
 # 
 # Developed with Kate
 #
-#  (c) 2016-2017 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
+#  (c) 2016-2020 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
 #  All rights reserved
 #
 #  This script is free software; you can redistribute it and/or modify
@@ -46,7 +46,7 @@ use JSON;
 
 use HttpUtils;
 
-my $version     = "0.6.5";
+my $version     = "0.7.3";
 my $bridgeapi   = "1.9";
 
 
@@ -97,11 +97,11 @@ sub NUKIBridge_CallBlocking($$$);
 sub NUKIBridge_Initialize($) {
 
     my ($hash) = @_;
-    
+
     # Provider
-    $hash->{ReadFn}     = "NUKIBridge_Read";
-    $hash->{WriteFn}    = "NUKIBridge_Read";
-    $hash->{Clients}    = ":NUKIDevice:";
+    $hash->{WriteFn}    = "NUKIBridge_Call";
+    $hash->{Clients}    = ':NUKIDevice:';
+    $hash->{MatchList}  = { '1:NUKIDevice' => '^{"deviceType".*' };
 
     my $webhookFWinstance   = join( ",", devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
       
@@ -504,8 +504,8 @@ sub NUKIBridge_Distribution($$$) {
         
         
         ###### Fehler bei Antwort auf Anfrage eines logischen Devices ######
-        NUKIDevice_Parse($param->{chash},$param->{code}) if( $param->{code} eq 404 );
-        NUKIDevice_Parse($param->{chash},$param->{code}) if( $param->{code} eq 400 and $hash != $param->{chash} );
+#         NUKIDevice_Parse($param->{chash},$param->{code}) if( $param->{code} eq 404 );
+#         NUKIDevice_Parse($param->{chash},$param->{code}) if( $param->{code} eq 400 and $hash != $param->{chash} );
         
         
         
@@ -513,19 +513,6 @@ sub NUKIBridge_Distribution($$$) {
         Log3 $name, 4, "NUKIBridge ($name) - nukiId is not known" if( $param->{code} eq 404 );
         Log3 $name, 4, "NUKIBridge ($name) - action is undefined" if( $param->{code} eq 400 and $hash == $param->{chash} );
 
-
-    ######### Zum testen da ich kein Nuki Smartlock habe ############
-    #if ( $param->{code} eq 404 ) {
-        #    if( defined($param->{chash}->{helper}{lockAction}) ) {
-        #        Log3 $name, 3, "NUKIBridge ($name) - Test JSON String for lockAction";
-        #        $json = '{"success": true, "batteryCritical": false}';
-        #    } else {
-        #        Log3 $name, 3, "NUKIBridge ($name) - Test JSON String for lockState";
-        #        $json = '{"state": 1, "stateName": "locked", "batteryCritical": false, "success": "true"}';
-        #    }
-        #    NUKIDevice_Parse($param->{chash},$json);
-        #}
-        
         
         readingsEndUpdate( $hash, 1 );
         return $param->{code};
@@ -533,16 +520,11 @@ sub NUKIBridge_Distribution($$$) {
     
     if( $hash == $param->{chash} ) {
         
-        # zum testen da ich kein Nuki Smartlock habe
-        #$json = '[{"nukiId": 1,"name": "Home","lastKnownState": {"state": 1,"stateName": "locked","batteryCritical": false,"timestamp": "2016-10-03T06:49:00+00:00"}},{"nukiId": 2,"name": "Grandma","lastKnownState": {"state": 3,"stateName": "unlocked","batteryCritical": false,"timestamp": "2016-10-03T06:49:00+00:00"}}]' if( $param->{endpoint} eq "list" );
-        
-        #$json= '{"bridgeType":2,"ids":{"serverId":142667440},"versions":{"appVersion":"0.2.14"},"uptime":1527,"currentTime":"2017-01-17T04:55:58Z","serverConnected":true,"scanResults":[{"nukiId": 1,"name": "Home","rssi": -87,"paired": true},{"nukiId": 2,"name": "Grandma","rssi": -93,"paired": false}]}' if( $param->{endpoint} eq "info" );
-        
         NUKIBridge_ResponseProcessing($hash,$json,$param->{endpoint});
         
     } else {
     
-        NUKIDevice_Parse($param->{chash},$json);
+#         NUKIDevice_Parse($param->{chash},$json);
     }
     
     readingsEndUpdate( $hash, 1 );
@@ -575,8 +557,45 @@ sub NUKIBridge_ResponseProcessing($$$) {
     
     if( ref($decode_json) eq "ARRAY" and scalar(@{$decode_json}) > 0 and $path eq "list" ) {
 
-        NUKIBridge_Autocreate($hash,$decode_json);
-        NUKIBridge_Call($hash,$hash,"info",undef,undef,undef) if( !IsDisabled($name) );
+#         NUKIBridge_Autocreate($hash,$decode_json);
+        
+        
+        my @buffer = split( '\[', $json );
+
+        my ( $json, $tail ) = NUKIBridge_ParseJSON( $hash, $buffer[1] );
+
+        while ($json) {
+
+            Log3 $name, 5,
+                "NUKIBridge ($name) - Decoding JSON message. Length: "
+              . length($json)
+              . " Content: "
+              . $json;
+            Log3 $name, 5,
+                "NUKIBridge ($name) - Vor Sub: Laenge JSON: "
+              . length($json)
+              . " Content: "
+              . $json
+              . " Tail: "
+              . $tail;
+
+
+            Dispatch( $hash, $json, undef )
+              unless ( not defined($tail) and not($tail) );
+
+            ( $json, $tail ) = NUKIBridge_ParseJSON( $hash, $tail );
+
+            Log3 $name, 5,
+                "NUKIBridge ($name) - Nach Sub: Laenge JSON: "
+              . length($json)
+              . " Content: "
+              . $json
+              . " Tail: "
+              . $tail;
+        }
+
+#         NUKIBridge_Call($hash,$hash,"info",undef,undef,undef)
+#           if( !IsDisabled($name) );
     }
     
     elsif( $path eq "info" ) {
@@ -590,7 +609,8 @@ sub NUKIBridge_ResponseProcessing($$$) {
         NUKIBridge_InfoProcessing($hash,$decode_json);
     
     } else {
-        Log3 $name, 5, "NUKIBridge ($name) - Rückgabe Path nicht korrekt: $json";
+        Log3 $name, 5, "NUKIBridge ($name) - Rückgabe Path nicht korrekt: 
+$json";
         return;
     }
     
@@ -640,7 +660,8 @@ sub NUKIBridge_CGI() {
         $hash->{WEBHOOK_LAST} = TimeNow();
         
         if ( defined( $modules{NUKIDevice}{defptr} ) ) {
-            while ( my ( $key, $value ) = each %{ $modules{NUKIDevice}{defptr} } ) {
+            while ( my ( $key, $value ) = each %{ $modules{NUKIDevice}{defptr} } 
+) {
             
                 $hash = $modules{NUKIDevice}{defptr}{$key};
                 $name = $hash->{NAME};
@@ -648,7 +669,8 @@ sub NUKIBridge_CGI() {
                 next if ( !$nukiId or $nukiId ne $decode_json->{nukiId} );
 
 
-                Log3 $name, 4, "NUKIBridge ($name) - Received webhook for matching NukiId at device $name";
+                Log3 $name, 4, "NUKIBridge ($name) - Received webhook for 
+matching NukiId at device $name";
             
                 NUKIDevice_Parse($hash,$json);
             }
@@ -695,18 +717,21 @@ sub NUKIBridge_Autocreate($$;$) {
         
         my $code = $name ."-".$nukiId;
         if( defined($modules{NUKIDevice}{defptr}{$code}) ) {
-            Log3 $name, 3, "NUKIDevice ($name) - NukiId '$nukiId' already defined as '$modules{NUKIDevice}{defptr}{$code}->{NAME}'";
+            Log3 $name, 3, "NUKIDevice ($name) - NukiId '$nukiId' already 
+defined as '$modules{NUKIDevice}{defptr}{$code}->{NAME}'";
             next;
         }
         
         my $devname = "NUKIDevice" . $nukiId;
         my $define= "$devname NUKIDevice $nukiId IODev=$name $nukiType";
         
-        Log3 $name, 3, "NUKIDevice ($name) - create new device '$devname' for address '$nukiId'";
+        Log3 $name, 3, "NUKIDevice ($name) - create new device '$devname' for 
+address '$nukiId'";
 
         my $cmdret= CommandDefine(undef,$define);
         if($cmdret) {
-            Log3 $name, 3, "NUKIDevice ($name) - Autocreate: An error occurred while creating device for nukiId '$nukiId': $cmdret";
+            Log3 $name, 3, "NUKIDevice ($name) - Autocreate: An error occurred 
+while creating device for nukiId '$nukiId': $cmdret";
         } else {
             $cmdret= CommandAttr(undef,"$devname alias $nukiName");
             $cmdret= CommandAttr(undef,"$devname room NUKI");
@@ -777,7 +802,7 @@ sub NUKIBridge_InfoProcessing($$) {
                     Log3 $name, 4, "NUKIDevice ($dname) - Received scanResults for matching NukiID $nukiId at device $dname";
             
                     %response_hash = ('name'=>$scanResults->{name}, 'rssi'=>$scanResults->{rssi},'paired'=>$scanResults->{paired});
-            
+
                     NUKIDevice_Parse($dhash,encode_json \%response_hash);
                 }
             }
@@ -846,9 +871,11 @@ sub NUKIBridge_getCallbackList($) {
     return
       unless ( ref($decode_json) eq 'HASH' );
     
-    Log3 $name, 4, "NUKIBridge ($name) - Callback data is collected and processed";
+    Log3 $name, 4, "NUKIBridge ($name) - Callback data is collected and 
+processed";
     
-    if( ref($decode_json->{callbacks}) eq "ARRAY" and scalar(@{$decode_json->{callbacks}}) > 0 ) {
+    if( ref($decode_json->{callbacks}) eq "ARRAY" and 
+scalar(@{$decode_json->{callbacks}}) > 0 ) {
         Log3 $name, 4, "NUKIBridge ($name) - created Table with log file";
     
         my $ret = '<html><table width=100%><tr><td>';
@@ -924,6 +951,59 @@ sub NUKIBridge_CallBlocking($$$) {
     Log3 $name, 5, "NUKIBridge ($name) - Data: $data";
     Log3 $name, 4, "NUKIBridge ($name) - Blocking HTTP Query finished";
     return ($decode_json);
+}
+
+sub NUKIBridge_ParseJSON($$) {
+
+    my ( $hash, $buffer ) = @_;
+
+    my $name  = $hash->{NAME};
+    my $open  = 0;
+    my $close = 0;
+    my $msg   = '';
+    my $tail  = '';
+
+    if ($buffer) {
+        foreach my $c ( split //, $buffer ) {
+            if ( $open == $close and $open > 0 ) {
+                $tail .= $c;
+                Log3 $name, 5,
+                  "NUKIBridge ($name) - $open == $close and $open > 0";
+
+            }
+            elsif ( ( $open == $close ) and ( $c ne '{' ) ) {
+
+                Log3 $name, 5,
+"NUKIBridge ($name) - Garbage character before message: "
+                  . $c;
+
+            }
+            else {
+
+                if ( $c eq '{' ) {
+
+                    $open++;
+
+                }
+                elsif ( $c eq '}' ) {
+
+                    $close++;
+                }
+
+                $msg .= $c;
+            }
+        }
+
+        if ( $open != $close ) {
+
+            $tail = $msg;
+            $msg  = '';
+        }
+    }
+
+    Log3 $name, 5,
+      "NUKIBridge ($name) - return msg: $msg and tail: $tail";
+    return ( $msg, $tail );
 }
 
 

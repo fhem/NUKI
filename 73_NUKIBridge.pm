@@ -88,7 +88,7 @@ sub NUKIBridge_Autocreate($$;$);
 sub NUKIBridge_InfoProcessing($$);
 sub NUKIBridge_getLogfile($);
 sub NUKIBridge_getCallbackList($);
-sub NUKIBridge_CallBlocking($$$);
+sub NUKIBridge_CallBlocking($@);
 
 
 
@@ -390,7 +390,7 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
         Log3 $name, 4, "NUKIBridge ($name) - run NUKIBridge_Write";
     }
     
-    InternalTimer( gettimeofday()+15+int(rand(15)), 'NUKIBridge_GetCheckBridgeAlive', $hash, 1 );
+    InternalTimer( gettimeofday()+15+int(rand(45)), 'NUKIBridge_GetCheckBridgeAlive', $hash, 1 );
     
     Log3 $name, 4, "NUKIBridge ($name) - Call InternalTimer for NUKIBridge_GetCheckBridgeAlive";
 }
@@ -430,7 +430,7 @@ sub NUKIBridge_Write($@) {
     HttpUtils_NonblockingGet(
         {
             url         => $uri,
-            timeout     => 5,
+            timeout     => 60,
             hash        => $hash,
             nukiId      => $nukiId,
             endpoint    => $path,
@@ -521,11 +521,18 @@ sub NUKIBridge_Distribution($$$) {
     
     if( $hash == $dhash ) {
         
-    NUKIBridge_ResponseProcessing($hash,$json,$param->{endpoint});
+        NUKIBridge_ResponseProcessing($hash,$json,$param->{endpoint});
         
     } else {
-    
-#         NUKIDevice_Parse($dhash,$json);
+
+        my $decode_json = eval{decode_json($json)};
+        if($@){
+            Log3 $name, 3, "NUKIBridge ($name) - JSON error while request: $@";
+            return;
+        }
+        
+        $decode_json->{nukiId} = $param->{nukiId};
+        $json = encode_json($decode_json);
         Dispatch($hash,$json,undef);
     }
     
@@ -618,61 +625,48 @@ $json";
 sub NUKIBridge_CGI() {
     
     my ($request) = @_;
-    
+
     my $hash;
     my $name;
-    my $nukiId;
-    
-    # data received
-    # Testaufruf:
-    # curl --data '{"nukiId": 123456, "state": 1,"stateName": "locked", "batteryCritical": false}' http://10.6.6.20:8083/fhem/NUKIDevice-123456
-    # wget --post-data '{"nukiId": 123456, "state": 1,"stateName": "locked", "batteryCritical": false}' http://10.6.6.20:8083/fhem/NUKIDevice-123456
-    
-    
-    my $header = join("\n", @FW_httpheader);
+    while ( my ( $key, $value ) = each %{ $modules{NUKIBridge}{defptr} } ) {
+        $hash = $modules{NUKIBridge}{defptr}{$key};
+        $name = $hash->{NAME};
+    }
 
-    my ($first,$json) = split("&",$request,2);
+    return "NUKIBridge WEBHOOK - No IODev found"
+        unless (defined($hash) and defined($name) );
+
+
+    my $json = (split("&",$request,2))[1];
     
     if( !$json ) {
-        Log3 $name, 3, "NUKIBridge ($name) - empty message received";
+        Log3 $name, 3, "NUKIBridge WEBHOOK ($name) - empty message received";
         return undef;
     } elsif( $json =~ m'HTTP/1.1 200 OK' ) {
-        Log3 $name, 4, "NUKIBridge ($name) - empty answer received";
+        Log3 $name, 4, "NUKIBridge WEBHOOK ($name) - empty answer received";
         return undef;
     } elsif( $json !~ m/^[\[{].*[}\]]$/ ) {
-        Log3 $name, 3, "NUKIBridge ($name) - invalid json detected: $json";
-        return "NUKIBridge ($name) - invalid json detected: $json";
+        Log3 $name, 3, "NUKIBridge WEBHOOK ($name) - invalid json detected: $json";
+        return "NUKIBridge WEBHOOK ($name) - invalid json detected: $json";
     }
     
-    Log3 $name, 5, "NUKIBridge ($name) - Webhook received with JSON: $json";
- 
-    my $decode_json = eval{decode_json($json)};
-    if($@){
-        Log3 $name, 3, "NUKIBridge ($name) - JSON error while request: $@";
-        return;
-    }
-    
-    
-    if( ref($decode_json) eq "HASH" ) {
+    Log3 $name, 5, "NUKIBridge WEBHOOK ($name) - Webhook received with JSON: $json";
+
+#     my $decode_json = eval{decode_json($json)};
+#     if($@){
+#         Log3 $name, 3, "NUKIBridge WEBHOOK ($name) - JSON error while request: $@";
+#         return;
+#     }
+
+
+    if( $json =~ m/^\{.*\}$/ ) {
         $hash->{WEBHOOK_COUNTER}++;
         $hash->{WEBHOOK_LAST} = TimeNow();
-        
-        if ( defined( $modules{NUKIDevice}{defptr} ) ) {
-            while ( my ( $key, $value ) = each %{ $modules{NUKIDevice}{defptr} } 
-) {
-            
-                $hash = $modules{NUKIDevice}{defptr}{$key};
-                $name = $hash->{NAME};
-                $nukiId = InternalVal( $name, "NUKIID", undef );
-                next if ( !$nukiId or $nukiId ne $decode_json->{nukiId} );
 
-
-                Log3 $name, 4, "NUKIBridge ($name) - Received webhook for 
+        Log3 $name, 4, "NUKIBridge WEBHOOK ($name) - Received webhook for 
 matching NukiId at device $name";
-            
-                NUKIDevice_Parse($hash,$json);
-            }
-        }
+
+        Dispatch($hash,$json,undef);
         
         return ( undef, undef );
     }
@@ -680,7 +674,7 @@ matching NukiId at device $name";
     # no data received
     else {
     
-        Log3 undef, 4, "NUKIBridge - received malformed request\n$request";
+        Log3 $name, 4, "NUKIBridge WEBHOOK - received malformed request\n$request";
     }
 
     return ( "text/plain; charset=utf-8", "Call failure: " . $request );
@@ -903,7 +897,7 @@ scalar(@{$decode_json->{callbacks}}) > 0 ) {
     return "No callback data available or error during processing";
 }
 
-sub NUKIBridge_CallBlocking($$$) {
+sub NUKIBridge_CallBlocking($@) {
 
     my ($hash,$path,$obj)  = @_;
     my $name    = $hash->{NAME};

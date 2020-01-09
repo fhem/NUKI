@@ -187,7 +187,7 @@ sub NUKIDevice_Define($$) {
     my $d = $modules{NUKIDevice}{defptr}{$nukiId};
 
     return
-'NUKIDevice device ' . $name . ' on GardenaSmartBridge ' . $iodev . ' already defined.'
+'NUKIDevice device ' . $name . ' on NUKIBridge ' . $iodev . ' already defined.'
       if (  defined($d)
         and $d->{IODev} == $hash->{IODev}
         and $d->{NAME} ne $name );
@@ -242,8 +242,7 @@ sub NUKIDevice_Attr(@) {
             Log3($name, 3, "NUKIDevice ($name) - enabled");
         }
     }
-    
-    if ( $attrName eq 'disabledForIntervals' ) {
+    elsif ( $attrName eq 'disabledForIntervals' ) {
         if ( $cmd eq 'set' ) {
             Log3($name, 3, "NUKIDevice ($name) - enable disabledForIntervals");
             readingsSingleUpdate ( $hash, 'state', 'Unknown', 1 );
@@ -252,6 +251,12 @@ sub NUKIDevice_Attr(@) {
         elsif ( $cmd eq 'del' ) {
             readingsSingleUpdate ( $hash, 'state', 'active', 1 );
             Log3($name, 3, "NUKIDevice ($name) - delete disabledForIntervals");
+        }
+    }
+    elsif ( $attrName eq 'model' ) {
+        if ( $cmd eq 'set' ) {
+            Log3($name, 3, "NUKIDevice ($name) - change model");
+            $hash->{DEVICETYPE} = $deviceTypeIds{$attrVal};
         }
     }
     
@@ -367,11 +372,19 @@ sub NUKIDevice_Parse($$) {
         Log3($name, 4,
             "NUKIDevice ($name) - find logical device: $hash->{NAME}");
 
+        ##################
+        ## Zwischenlösung so für die Umstellung, kann später gelöscht werden
+        if ( AttrVal($name,'model','') eq '' ) {
+            CommandDefMod(undef,$name . ' NUKIDevice ' . $hash->{NUKIID} . ' ' . $decode_json->{deviceType});
+            CommandAttr(undef,$name . ' model ' . $deviceTypes{$decode_json->{deviceType}});
+            Log3($name, 2, "NUKIDevice ($name) - redefined Defmod");
+        }
+
         return $hash->{NAME};
     }
     else {
         Log3($name, 3,
-            'NUKIDevice ($name) - autocreate new device '
+            "NUKIDevice ($name) - autocreate new device "
             . makeDeviceName( $decode_json->{name} )
             . " with nukiId $decode_json->{nukiId}, model $decode_json->{deviceType}");
         return

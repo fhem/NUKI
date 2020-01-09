@@ -2,7 +2,7 @@
 # 
 # Developed with Kate
 #
-#  (c) 2016-2017 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
+#  (c) 2016-2020 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
 #  All rights reserved
 #
 #  This script is free software; you can redistribute it and/or modify
@@ -30,10 +30,80 @@ package main;
 
 use strict;
 use warnings;
-use JSON;
+
+# try to use JSON::MaybeXS wrapper
+#   for chance of better performance + open code
+eval {
+    require JSON::MaybeXS;
+    import JSON::MaybeXS qw( decode_json encode_json );
+    1;
+};
+
+if ($@) {
+    $@ = undef;
+
+    # try to use JSON wrapper
+    #   for chance of better performance
+    eval {
+
+        # JSON preference order
+        local $ENV{PERL_JSON_BACKEND} =
+          'Cpanel::JSON::XS,JSON::XS,JSON::PP,JSON::backportPP'
+          unless ( defined( $ENV{PERL_JSON_BACKEND} ) );
+
+        require JSON;
+        import JSON qw( decode_json encode_json );
+        1;
+    };
+
+    if ($@) {
+        $@ = undef;
+
+        # In rare cases, Cpanel::JSON::XS may
+        #   be installed but JSON|JSON::MaybeXS not ...
+        eval {
+            require Cpanel::JSON::XS;
+            import Cpanel::JSON::XS qw(decode_json encode_json);
+            1;
+        };
+
+        if ($@) {
+            $@ = undef;
+
+            # In rare cases, JSON::XS may
+            #   be installed but JSON not ...
+            eval {
+                require JSON::XS;
+                import JSON::XS qw(decode_json encode_json);
+                1;
+            };
+
+            if ($@) {
+                $@ = undef;
+
+                # Fallback to built-in JSON which SHOULD
+                #   be available since 5.014 ...
+                eval {
+                    require JSON::PP;
+                    import JSON::PP qw(decode_json encode_json);
+                    1;
+                };
+
+                if ($@) {
+                    $@ = undef;
+
+                    # Fallback to JSON::backportPP in really rare cases
+                    require JSON::backportPP;
+                    import JSON::backportPP qw(decode_json encode_json);
+                    1;
+                }
+            }
+        }
+    }
+}
 
 
-my $version = "0.7.9";
+my $version = '0.7.11';
 
 
 
@@ -45,7 +115,6 @@ sub NUKIDevice_Undef($$);
 sub NUKIDevice_Attr(@);
 sub NUKIDevice_Set($$@);
 sub NUKIDevice_GetUpdate($);
-sub NUKIDevice_ReadFromNUKIBridge($@);
 sub NUKIDevice_Parse($$);
 sub NUKIDevice_WriteReadings($$);
 
@@ -62,36 +131,33 @@ my %deviceTypeIds = reverse(%deviceTypes);
 
 
 sub NUKIDevice_Initialize($) {
-
     my ($hash) = @_;
     
     $hash->{Match} = '^{.*}$';
 
-    $hash->{SetFn}          = "NUKIDevice_Set";
-    $hash->{DefFn}          = "NUKIDevice_Define";
-    $hash->{UndefFn}        = "NUKIDevice_Undef";
-    $hash->{AttrFn}         = "NUKIDevice_Attr";
+    $hash->{SetFn}          = 'NUKIDevice_Set';
+    $hash->{DefFn}          = 'NUKIDevice_Define';
+    $hash->{UndefFn}        = 'NUKIDevice_Undef';
+    $hash->{AttrFn}         = 'NUKIDevice_Attr';
     $hash->{ParseFn}        = 'NUKIDevice_Parse';
     
-    $hash->{AttrList}       = "IODev ".
-                              "model:opener,smartlock ".
-                              "disable:1 ".
+    $hash->{AttrList}       = 'IODev '.
+                              'model:opener,smartlock '.
+                              'disable:1 '.
                               $readingFnAttributes;
-
 
 
     foreach my $d(sort keys %{$modules{NUKIDevice}{defptr}}) {
         my $hash = $modules{NUKIDevice}{defptr}{$d};
-        $hash->{VERSION} 	= $version;
+        $hash->{VERSION}    = $version;
     }
 }
 
 sub NUKIDevice_Define($$) {
-
     my ( $hash, $def ) = @_;
     my @a = split( '[ \t][ \t]*', $def );
 
-    return "too few parameters: define <name> NUKIDevice <nukiId> <deviceType>" if( @a < 2 );
+    return 'too few parameters: define <name> NUKIDevice <nukiId> <deviceType>' if ( @a != 4 );
 
 
     my $name            = $a[0];
@@ -109,11 +175,11 @@ sub NUKIDevice_Define($$) {
     AssignIoPort( $hash, $iodev ) if ( !$hash->{IODev} );
 
     if ( defined( $hash->{IODev}->{NAME} ) ) {
-        Log3 $name, 3, "NUKIDevice ($name) - I/O device is "
-          . $hash->{IODev}->{NAME};
+        Log3($name, 3, "NUKIDevice ($name) - I/O device is "
+          . $hash->{IODev}->{NAME});
     }
     else {
-        Log3 $name, 1, "NUKIDevice ($name) - no I/O device";
+        Log3($name, 1, "NUKIDevice ($name) - no I/O device");
     }
 
     $iodev = $hash->{IODev}->{NAME};
@@ -121,24 +187,24 @@ sub NUKIDevice_Define($$) {
     my $d = $modules{NUKIDevice}{defptr}{$nukiId};
 
     return
-"NUKIDevice device $name on GardenaSmartBridge $iodev already defined."
+'NUKIDevice device ' . $name . ' on GardenaSmartBridge ' . $iodev . ' already defined.'
       if (  defined($d)
         and $d->{IODev} == $hash->{IODev}
         and $d->{NAME} ne $name );
   
   
-    Log3 $name, 3, "NUKIDevice ($name) - defined with NukiId: $nukiId";
-    Log3 $name, 1, "NUKIDevice ($name) - reading battery a deprecated and will be remove in future";
+    Log3($name, 3, "NUKIDevice ($name) - defined with NukiId: $nukiId");
+    Log3($name, 1, "NUKIDevice ($name) - reading battery a deprecated and will be remove in future");
 
     CommandAttr(undef,$name . ' room NUKI')
       if ( AttrVal($name,'room','none') eq 'none');
     CommandAttr(undef,$name . ' model ' . $deviceTypes{$deviceType})
       if ( AttrVal($name,'model','none') eq 'none');
     
-    if( $init_done ) {
-        InternalTimer( gettimeofday()+int(rand(10)), "NUKIDevice_GetUpdate", $hash, 0 );
+    if ( $init_done ) {
+        InternalTimer( gettimeofday()+int(rand(10)), "NUKIDevice_GetUpdate", $hash);
     } else {
-        InternalTimer( gettimeofday()+15+int(rand(5)), "NUKIDevice_GetUpdate", $hash, 0 );
+        InternalTimer( gettimeofday()+15+int(rand(5)), "NUKIDevice_GetUpdate", $hash);
     }
     
     $modules{NUKIDevice}{defptr}{$nukiId} = $hash;
@@ -147,7 +213,6 @@ sub NUKIDevice_Define($$) {
 }
 
 sub NUKIDevice_Undef($$) {
-
     my ( $hash, $arg ) = @_;
     
     my $nukiId = $hash->{NUKIID};
@@ -155,39 +220,39 @@ sub NUKIDevice_Undef($$) {
     
     RemoveInternalTimer($hash);
 
-    Log3 $name, 3, "NUKIDevice ($name) - undefined with NukiId: $nukiId";
+    Log3($name, 3, "NUKIDevice ($name) - undefined with NukiId: $nukiId");
     delete($modules{NUKIDevice}{defptr}{$nukiId});
 
     return undef;
 }
 
 sub NUKIDevice_Attr(@) {
-
     my ( $cmd, $name, $attrName, $attrVal ) = @_;
+
     my $hash = $defs{$name};
     my $token = $hash->{IODev}->{TOKEN};
 
-    if( $attrName eq "disable" ) {
-        if( $cmd eq "set" and $attrVal eq "1" ) {
-            readingsSingleUpdate ( $hash, "state", "disabled", 1 );
-            Log3 $name, 3, "NUKIDevice ($name) - disabled";
+    if ( $attrName eq 'disable' ) {
+        if ( $cmd eq 'set' and $attrVal == 1 ) {
+            readingsSingleUpdate ( $hash, 'state', 'disabled', 1 );
+            Log3($name, 3, "NUKIDevice ($name) - disabled");
         }
 
-        elsif( $cmd eq "del" ) {
-            readingsSingleUpdate ( $hash, "state", "active", 1 );
-            Log3 $name, 3, "NUKIDevice ($name) - enabled";
+        elsif ( $cmd eq 'del' ) {
+            readingsSingleUpdate ( $hash, 'state', 'active', 1 );
+            Log3($name, 3, "NUKIDevice ($name) - enabled");
         }
     }
     
-    if( $attrName eq "disabledForIntervals" ) {
-        if( $cmd eq "set" ) {
-            Log3 $name, 3, "NUKIDevice ($name) - enable disabledForIntervals";
-            readingsSingleUpdate ( $hash, "state", "Unknown", 1 );
+    if ( $attrName eq 'disabledForIntervals' ) {
+        if ( $cmd eq 'set' ) {
+            Log3($name, 3, "NUKIDevice ($name) - enable disabledForIntervals");
+            readingsSingleUpdate ( $hash, 'state', 'Unknown', 1 );
         }
 
-        elsif( $cmd eq "del" ) {
-            readingsSingleUpdate ( $hash, "state", "active", 1 );
-            Log3 $name, 3, "NUKIDevice ($name) - delete disabledForIntervals";
+        elsif ( $cmd eq 'del' ) {
+            readingsSingleUpdate ( $hash, 'state', 'active', 1 );
+            Log3($name, 3, "NUKIDevice ($name) - delete disabledForIntervals");
         }
     }
     
@@ -195,264 +260,205 @@ sub NUKIDevice_Attr(@) {
 }
 
 sub NUKIDevice_Set($$@) {
-    
     my ($hash, $name, @aa) = @_;
-    my ($cmd, @args) = @aa;
 
+    my ($cmd, @args) = @aa;
     my $lockAction;
 
-
-    if( $cmd eq 'statusRequest' ) {
-        return "usage: statusRequest" if( @args != 0 );
+    if ( lc($cmd) eq 'statusrequest' ) {
+        return('usage: statusRequest') if ( @args != 0 );
 
         NUKIDevice_GetUpdate($hash);
         return undef;
+
+    } elsif ( $cmd eq 'unpair' ) {
+        return('usage: unpair') if ( @args != 0 );
         
-    } elsif( $cmd eq 'lock' or $cmd eq 'deactivateRto' ) {
+        if ( !IsDisabled($name) ) {
+            $hash->{IODev}->{helper}->{iowrite} = 1
+              if ( $hash->{IODev}->{helper}->{iowrite} == 0 );
+            IOWrite($hash,$cmd,undef,$hash->{NUKIID},$hash->{DEVICETYPE});
+        }
+
+        return undef;
+    } elsif ( $cmd eq 'lock' 
+          or lc($cmd) eq 'deactivaterto'
+          or $cmd eq 'unlock'
+          or lc($cmd) eq 'activaterto'
+          or $cmd eq 'unlatch'
+          or lc($cmd) eq 'electricstrikeactuation'
+          or lc($cmd) eq 'lockngo'
+          or lc($cmd) eq 'activatecontinuousmode'
+          or lc($cmd) eq 'lockngowithunlatch'
+          or lc($cmd) eq 'deactivatecontinuousmode'
+        ) 
+      {
+        return('usage: ' . $cmd)
+          if ( @args != 0 );
         $lockAction = $cmd;
 
-    } elsif( $cmd eq 'unlock' or $cmd eq 'activateRto' ) {
-        $lockAction = $cmd;
-        
-    } elsif( $cmd eq 'unlatch' or $cmd eq 'electricStrikeActuation' ) {
-        $lockAction = $cmd;
-        
-    } elsif( $cmd eq 'locknGo' or $cmd eq 'activateContinuousMode' ) {
-        $lockAction = $cmd;
-        
-    } elsif( $cmd eq 'locknGoWithUnlatch' or $cmd eq 'deactivateContinuousMode' ) {
-        $lockAction = $cmd;
-    
-    } elsif( $cmd eq 'unpair' ) {
-        
-#         NUKIDevice_ReadFromNUKIBridge($hash,"$cmd",undef,$hash->{NUKIID},$hash->{DEVICETYPE} ) if( !IsDisabled($name) );
-        IOWrite($hash,"$cmd",undef,$hash->{NUKIID},$hash->{DEVICETYPE}) if( !IsDisabled($name) );
-        return undef;
-    
     } else {
         my $list = '';
-        
-        if ( $hash->{DEVICETYPE} == 0 ) {
-            $list= "statusRequest:noArg unlock:noArg lock:noArg unlatch:noArg locknGo:noArg locknGoWithUnlatch:noArg unpair:noArg";
-        } elsif ( $hash->{DEVICETYPE} == 2 ) {
-            $list= "statusRequest:noArg activateRto:noArg deactivateRto:noArg electricStrikeActuation:noArg activateContinuousMode:noArg deactivateContinuousMode:noArg unpair:noArg";
-        }
-        
-        return "Unknown argument $cmd, choose one of $list";
+        $list= 'statusRequest:noArg unlock:noArg lock:noArg unlatch:noArg locknGo:noArg locknGoWithUnlatch:noArg unpair:noArg'
+          if ( $hash->{DEVICETYPE} == 0 );
+        $list= 'statusRequest:noArg activateRto:noArg deactivateRto:noArg electricStrikeActuation:noArg activateContinuousMode:noArg deactivateContinuousMode:noArg unpair:noArg'
+          if ( $hash->{DEVICETYPE} == 2 );
+
+        return('Unknown argument ' . $cmd . ', choose one of ' . $list);
     }
     
     $hash->{helper}{lockAction} = $lockAction;
+    $hash->{IODev}->{helper}->{iowrite} = 1
+      if ( $hash->{IODev}->{helper}->{iowrite} == 0 );
     IOWrite($hash,"lockAction",$lockAction,$hash->{NUKIID},$hash->{DEVICETYPE});
-#     NUKIDevice_ReadFromNUKIBridge($hash,"lockAction",$lockAction,$hash->{NUKIID},$hash->{DEVICETYPE} ) if( !IsDisabled($name) );
-    
+
     return undef;
 }
 
 sub NUKIDevice_GetUpdate($) {
+    my $hash = shift;
 
-    my ($hash) = @_;
     my $name = $hash->{NAME};
     
     RemoveInternalTimer($hash);
-    
-#     NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID}, $hash->{DEVICETYPE} ) if( !IsDisabled($name) );
-    IOWrite($hash, "lockState", undef, $hash->{NUKIID}, $hash->{DEVICETYPE} ) if( !IsDisabled($name) );
-    Log3 $name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call IOWrite" if( !IsDisabled($name) );
+
+    IOWrite($hash, 'lockState', undef, $hash->{NUKIID}, $hash->{DEVICETYPE} )
+      if ( !IsDisabled($name) );
+    Log3($name, 5, "NUKIDevice ($name) - NUKIDevice_GetUpdate Call IOWrite")
+      if ( !IsDisabled($name) );
 
     return undef;
 }
 
-sub NUKIDevice_ReadFromNUKIBridge($@) {
-
-    my ($hash,@a) = @_;
-    my $name = $hash->{NAME};
-    
-    Log3 $name, 4, "NUKIDevice ($name) - NUKIDevice_ReadFromNUKIBridge check Bridge connected";
-    return "IODev $hash->{IODev} is not connected" if( ReadingsVal($hash->{IODev}->{NAME},"state","not connected") eq "not connected" );
-    
-    
-    no strict "refs";
-    my $ret;
-    unshift(@a,$name);
-    
-    Log3 $name, 4, "NUKIDevice ($name) - NUKIDevice_ReadFromNUKIBridge Bridge is connected call IOWrite";
-    
-    $ret = IOWrite($hash,$hash,@a);
-    use strict "refs";
-    return $ret;
-    return if(IsDummy($name) || IsIgnored($name));
-    my $iohash = $hash->{IODev};
-    
-    if(!$iohash ||
-        !$iohash->{TYPE} ||
-        !$modules{$iohash->{TYPE}} ||
-        !$modules{$iohash->{TYPE}}{ReadFn}) {
-        Log3 $name, 3, "NUKIDevice ($name) - No I/O device or ReadFn found for $name";
-        return;
-    }
-
-    no strict "refs";
-    unshift(@a,$name);
-    $ret = &{$modules{$iohash->{TYPE}}{ReadFn}}($iohash, @a);
-    use strict "refs";
-    return $ret;
-}
-
 sub NUKIDevice_Parse($$) {
+    my($hash,$json) = @_;
 
-    my($hash,$result) = @_;
     my $name = $hash->{NAME};
 
-    Log3 $name, 5, "NUKIDevice ($name) - Parse with result: $result";
+    Log3($name, 5, "NUKIDevice ($name) - Parse with result: $json");
     #########################################
     ####### Errorhandling #############
     
-    if( !$result ) {
-        Log3 $name, 3, "NUKIDevice ($name) - empty answer received";
-        return undef;
-    } elsif( $result =~ m'HTTP/1.1 200 OK' ) {
-        Log3 $name, 4, "NUKIDevice ($name) - empty answer received";
-        return undef;
-    } elsif( $result !~ m/^[\[{].*[}\]]$/ ) {
-        Log3 $name, 3, "NUKIDevice ($name) - invalid json detected: $result";
-        return "NUKIDevice ($name) - invalid json detected: $result";
+    if ( $json !~ m/^[\[{].*[}\]]$/ ) {
+        Log3($name, 3, "NUKIDevice ($name) - invalid json detected: $json");
+        return "NUKIDevice ($name) - invalid json detected: $json";
     }
-    
-    if( $result =~ /\d{3}/ ) {
-        if( $result eq 400 ) {
-            readingsSingleUpdate( $hash, "state", "action is undefined", 1 );
-            Log3 $name, 3, "NUKIDevice ($name) - action is undefined";
-            return;
-        }
-    
-        if( $result eq 404 ) {
-            readingsSingleUpdate( $hash, "state", "nukiId is not known", 1 );
-            Log3 $name, 3, "NUKIDevice ($name) - nukiId is not known";
-            return;
-        }
-        
-        if( $result eq 503 ) {
-            readingsSingleUpdate( $hash, "state", "smartlock is offline", 1 );
-            Log3 $name, 3, "NUKIDevice ($name) - smartlock is offline";
-            return;
-        }
-    }
-    
+
     
     #########################################
     #### verarbeiten des JSON Strings #######
-    my $decode_json = eval{decode_json($result)};
-    if($@){
-        Log3 $name, 3, "NUKIDevice ($name) - JSON error while request: $@";
+    my $decode_json = eval{ decode_json($json) };
+    if ($@){
+        Log3($name, 3, "NUKIDevice ($name) - JSON error while request: $@");
         return;
     }
     
     
-    if( ref($decode_json) ne "HASH" ) {
-        Log3 $name, 2, "NUKIDevice ($name) - got wrong status message for $name: $decode_json";
+    if ( ref($decode_json) ne 'HASH' ) {
+        Log3($name, 2, "NUKIDevice ($name) - got wrong status message for $name: $decode_json");
         return undef;
     }
-    
-    elsif ( defined( $decode_json->{nukiId} ) ) {
 
-        my $nukiId = $decode_json->{nukiId};
+    my $nukiId = $decode_json->{nukiId};
 
-        if ( my $hash = $modules{NUKIDevice}{defptr}{$nukiId} ) {
-            my $name = $hash->{NAME};
+    if ( my $hash = $modules{NUKIDevice}{defptr}{$nukiId} ) {
+        my $name = $hash->{NAME};
 
-            NUKIDevice_WriteReadings( $hash, $decode_json );
-            Log3 $name, 4,
-              "NUKIDevice ($name) - find logical device: $hash->{NAME}";
+        NUKIDevice_WriteReadings( $hash, $decode_json );
+        Log3($name, 4,
+            "NUKIDevice ($name) - find logical device: $hash->{NAME}");
 
-            return $hash->{NAME};
-
-        }
-        else {
-
-            Log3 $name, 3,
-                "NUKIDevice ($name) - autocreate new device "
-              . makeDeviceName( $decode_json->{name} )
-              . " with nukiId $decode_json->{nukiId}, model $decode_json->{deviceType}";
-            return
-                "UNDEFINED "
-              . makeDeviceName( $decode_json->{name} )
-              . " NUKIDevice $decode_json->{nukiId} $decode_json->{deviceType}";
-        }
+        return $hash->{NAME};
+    }
+    else {
+        Log3($name, 3,
+            'NUKIDevice ($name) - autocreate new device '
+            . makeDeviceName( $decode_json->{name} )
+            . " with nukiId $decode_json->{nukiId}, model $decode_json->{deviceType}");
+        return
+            'UNDEFINED '
+            . makeDeviceName( $decode_json->{name} )
+            . " NUKIDevice $decode_json->{nukiId} $decode_json->{deviceType}";
     }
 
-    Log3 $name, 5, "NUKIDevice ($name) - parse status message for $name";
-    
+    Log3($name, 5, "NUKIDevice ($name) - parse status message for $name");
+
     NUKIDevice_WriteReadings($hash,$decode_json);
 }
 
 sub NUKIDevice_WriteReadings($$) {
-
     my ($hash,$decode_json)     = @_;
+
     my $name                    = $hash->{NAME};
-    
-    
-    
+
+
     ############################
     #### Status des Smartlock
     
     my $battery;
-    if( defined($decode_json->{batteryCritical}) ) {
-        if( $decode_json->{batteryCritical} eq "false" or $decode_json->{batteryCritical} == 0 ) {
-            $battery = "ok";
-        } elsif ( $decode_json->{batteryCritical} eq "true" or $decode_json->{batteryCritical} == 1 ) {
+    if ( defined($decode_json->{batteryCritical}) ) {
+        if ( $decode_json->{batteryCritical} eq 'false'
+          or $decode_json->{batteryCritical} == 0 )
+        {
+            $battery = 'ok';
+
+        } elsif ( $decode_json->{batteryCritical} eq 'true'
+               or $decode_json->{batteryCritical} == 1 )
+        {
             $battery = "low";
         }
     }
 
-
     readingsBeginUpdate($hash);
     
-    if( defined($hash->{helper}{lockAction}) ) {
-    
+    if ( defined($hash->{helper}{lockAction}) ) {
         my ($state,$lockState);
-        
-        
-        if( defined($decode_json->{success}) and ($decode_json->{success} eq "true" or $decode_json->{success} eq "1") ) {
-        
+
+        if (  defined($decode_json->{success})
+          and ($decode_json->{success} eq 'true'
+            or $decode_json->{success} == 1) 
+          )
+        {
             $state = $hash->{helper}{lockAction};
             $lockState = $hash->{helper}{lockAction};
-#             NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} ) if( ReadingsVal($hash->{IODev}->{NAME},'bridgeType','Software') eq 'Software' );
-            IOWrite($hash, "lockState", undef, $hash->{NUKIID} ) if( ReadingsVal($hash->{IODev}->{NAME},'bridgeType','Software') eq 'Software' );
-            
-        } elsif ( defined($decode_json->{success}) and ($decode_json->{success} eq "false" or $decode_json->{success} eq "0") ) {
+
+            IOWrite($hash, "lockState", undef, $hash->{NUKIID} )
+              if ( ReadingsVal($hash->{IODev}->{NAME},'bridgeType','Software') eq 'Software' );
+
+        } elsif ( defined($decode_json->{success})
+              and ($decode_json->{success} eq 'false'
+                or $decode_json->{success} == 0)
+              )
+        {
         
-            $state = "error";
-#             NUKIDevice_ReadFromNUKIBridge($hash, "lockState", undef, $hash->{NUKIID} );
-            IOWrite($hash, "lockState", undef, $hash->{NUKIID}, $hash->{DEVICETYPE} );
+            $state = $deviceTypes{$hash->{DEVICETYPE}} . ' response error';
+            IOWrite($hash, 'lockState', undef, $hash->{NUKIID}, $hash->{DEVICETYPE} );
         }
 
-        readingsBulkUpdate( $hash, "state", $state );
-        readingsBulkUpdate( $hash, "lockState", $lockState );
-        readingsBulkUpdate( $hash, "success", $decode_json->{success} );
-        
-        
+        readingsBulkUpdate( $hash, 'state', $state );
+        readingsBulkUpdate( $hash, 'lockState', $lockState );
+        readingsBulkUpdate( $hash, 'success', $decode_json->{success} );
+
         delete $hash->{helper}{lockAction};
-        Log3 $name, 5, "NUKIDevice ($name) - lockAction readings set for $name";
+        Log3($name, 5, "NUKIDevice ($name) - lockAction readings set for $name");
     
     } else {
+        readingsBulkUpdate( $hash, 'batteryCritical', $decode_json->{batteryCritical} );
+        readingsBulkUpdate( $hash, 'lockState', $decode_json->{stateName} );
+        readingsBulkUpdate( $hash, 'state', $decode_json->{stateName} );
+        readingsBulkUpdate( $hash, 'battery', $battery );
+        readingsBulkUpdate( $hash, 'batteryState', $battery );
+        readingsBulkUpdate( $hash, 'success', $decode_json->{success} );
         
-        readingsBulkUpdate( $hash, "batteryCritical", $decode_json->{batteryCritical} );
-        readingsBulkUpdate( $hash, "lockState", $decode_json->{stateName} );
-        readingsBulkUpdate( $hash, "state", $decode_json->{stateName} );
-        readingsBulkUpdate( $hash, "battery", $battery );
-        readingsBulkUpdate( $hash, "batteryState", $battery );
-        readingsBulkUpdate( $hash, "success", $decode_json->{success} );
-        
-        readingsBulkUpdate( $hash, "name", $decode_json->{name} );
-        readingsBulkUpdate( $hash, "rssi", $decode_json->{rssi} );
-        readingsBulkUpdate( $hash, "paired", $decode_json->{paired} );
+        readingsBulkUpdate( $hash, 'name', $decode_json->{name} );
+        readingsBulkUpdate( $hash, 'rssi', $decode_json->{rssi} );
+        readingsBulkUpdate( $hash, 'paired', $decode_json->{paired} );
     
-        Log3 $name, 5, "NUKIDevice ($name) - readings set for $name";
+        Log3($name, 5, "NUKIDevice ($name) - readings set for $name");
     }
     
     readingsEndUpdate( $hash, 1 );
-    
-    
+
     return undef;
 }
 

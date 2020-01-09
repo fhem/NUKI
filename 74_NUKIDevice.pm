@@ -194,7 +194,6 @@ sub NUKIDevice_Define($$) {
   
   
     Log3($name, 3, "NUKIDevice ($name) - defined with NukiId: $nukiId");
-    Log3($name, 1, "NUKIDevice ($name) - reading battery a deprecated and will be remove in future");
 
     CommandAttr(undef,$name . ' room NUKI')
       if ( AttrVal($name,'room','none') eq 'none');
@@ -446,7 +445,6 @@ sub NUKIDevice_WriteReadings($$) {
         readingsBulkUpdate( $hash, 'batteryCritical', $decode_json->{batteryCritical} );
         readingsBulkUpdate( $hash, 'lockState', $decode_json->{stateName} );
         readingsBulkUpdate( $hash, 'state', $decode_json->{stateName} );
-        readingsBulkUpdate( $hash, 'battery', $battery );
         readingsBulkUpdate( $hash, 'batteryState', $battery );
         readingsBulkUpdate( $hash, 'success', $decode_json->{success} );
         

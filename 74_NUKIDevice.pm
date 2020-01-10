@@ -527,7 +527,8 @@ sub NUKIDevice_WriteReadings($$) {
             or $t eq 'mode'
             or $t eq 'deviceType'
             or $t eq 'paired'
-            or $t eq 'batteryCritical' );
+            or $t eq 'batteryCritical'
+            or $t eq 'timestamp' );
         readingsBulkUpdate( $hash, $t, ($v =~ m/^[0-9]$/ ? $lockStates{$v}{ $hash->{DEVICETYPE} } : $v) )
           if ( $t eq 'state' );
         readingsBulkUpdate( $hash, $t, $modes{$v}{ $hash->{DEVICETYPE} } )

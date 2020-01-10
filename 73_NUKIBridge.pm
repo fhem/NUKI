@@ -168,7 +168,7 @@ sub NUKIBridge_Initialize($) {
     $hash->{MatchList} = { '1:NUKIDevice' => '^{.*}$' };
 
     my $webhookFWinstance =
-      join( ',', devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
+      join( ",", devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
 
     # Consumer
     $hash->{SetFn}   = 'NUKIBridge_Set';
@@ -536,7 +536,7 @@ sub NUKIBridge_firstRun($) {
 }
 
 sub NUKIBridge_Write($@) {
-    my ( $hash, $path, $lockAction, $nukiId, $deviceType ) = @_;
+    my ( $hash, $path, $obj, $nukiId, $deviceType ) = @_;
 
     my $name  = $hash->{NAME};
     my $host  = $hash->{HOST};
@@ -546,18 +546,18 @@ sub NUKIBridge_Write($@) {
     my $uri = 'http://' . $hash->{HOST} . ':' . $port;
     $uri .= '/' . $path        if ( defined $path );
     $uri .= '?token=' . $token if ( defined($token) );
-    $uri .= '&action=' . $lockActionsSmartLock{$lockAction}
-      if (  defined($lockAction)
+    $uri .= '&action=' . $lockActionsSmartLock{$obj}
+      if (  defined($obj)
         and $path ne 'callback/add'
         and $deviceType == 0 );
 
-    $uri .= '&action=' . $lockActionsOpener{$lockAction}
-      if (  defined($lockAction)
+    $uri .= '&action=' . $lockActionsOpener{$obj}
+      if (  defined($obj)
         and $path ne 'callback/add'
         and $deviceType == 2 );
 
-    $uri .= '&url=' . $lockAction
-      if ( defined($lockAction)
+    $uri .= '&url=' . $obj
+      if ( defined($obj)
         and $path eq 'callback/add' );
 
     $uri .= '&nukiId=' . $nukiId

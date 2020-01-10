@@ -101,7 +101,7 @@ if ($@) {
     }
 }
 
-my $version = '0.7.15';
+my $version = '0.7.27';
 
 # Declare functions
 sub NUKIDevice_Initialize($);
@@ -116,6 +116,64 @@ sub NUKIDevice_WriteReadings($$);
 my %deviceTypes = (
     0 => 'smartlock',
     2 => 'opener'
+);
+
+my %modes = (
+    2 => {
+        0 => 'door mode',
+        2 => 'door mode'
+    },
+    3 => {
+        0 => '-',
+        2 => ' continuous mode'
+    }
+);
+
+my %lockStates = (
+    0 => {
+        0 => 'uncalibrated',
+        2 => 'untrained'
+    },
+    1 => {
+        0 => 'locked',
+        2 => 'online'
+    },
+    2 => {
+        0 => 'unlocking',
+        2 => '-'
+    },
+    3 => {
+        0 => 'unlocked',
+        2 => 'rto active'
+    },
+    4 => {
+        0 => 'locking',
+        2 => '-'
+    },
+    5 => {
+        0 => 'unlatched',
+        2 => 'open'
+    },
+    6 => {
+        0 => 'unlocked (lock ‘n’ go)',
+        2 => '-'
+    },
+    7 => {
+        0 => 'unlatching',
+        2 => 'opening'
+    },
+    253 => {
+        0 => '-',
+        2 => 'boot run'
+    },
+    254 => {
+        0 => 'motor blocked',
+        2 => '-'
+    },
+    255 => {
+        0 => 'undefined',
+        2 => 'undefined'
+    }
 );
 
 my %deviceTypeIds = reverse(%deviceTypes);
@@ -416,36 +474,17 @@ sub NUKIDevice_WriteReadings($$) {
     ############################
     #### Status des Smartlock
 
-    my $battery;
-    if ( defined( $decode_json->{batteryCritical} ) ) {
-        if (   $decode_json->{batteryCritical} eq 'false'
-            or $decode_json->{batteryCritical} == 0 )
-        {
-            $battery = 'ok';
-
-        }
-        elsif ($decode_json->{batteryCritical} eq 'true'
-            or $decode_json->{batteryCritical} == 1 )
-        {
-            $battery = "low";
-        }
-    }
-
-    readingsBeginUpdate($hash);
+    my $state;
 
     if ( defined( $hash->{helper}{lockAction} ) ) {
-        my ( $state, $lockState );
-
         if (
             defined( $decode_json->{success} )
             and (  $decode_json->{success} eq 'true'
                 or $decode_json->{success} == 1 )
           )
         {
-            $state     = $hash->{helper}{lockAction};
-            $lockState = $hash->{helper}{lockAction};
-
-            IOWrite( $hash, "lockState", undef, $hash->{NUKIID} )
+            $state = $hash->{helper}{lockAction};
+            IOWrite( $hash, 'lockState', undef, $hash->{NUKIID} )
               if (
                 ReadingsVal( $hash->{IODev}->{NAME}, 'bridgeType', 'Software' )
                 eq 'Software' );
@@ -463,31 +502,47 @@ sub NUKIDevice_WriteReadings($$) {
                 $hash->{DEVICETYPE} );
         }
 
-        readingsBulkUpdate( $hash, 'state',     $state );
-        readingsBulkUpdate( $hash, 'lockState', $lockState );
-        readingsBulkUpdate( $hash, 'success',   $decode_json->{success} );
-
         delete $hash->{helper}{lockAction};
-        Log3( $name, 5,
-            "NUKIDevice ($name) - lockAction readings set for $name" );
-
     }
-    else {
-        readingsBulkUpdate( $hash, 'batteryCritical',
-            $decode_json->{batteryCritical} );
-        readingsBulkUpdate( $hash, 'lockState',    $decode_json->{stateName} );
-        readingsBulkUpdate( $hash, 'state',        $decode_json->{stateName} );
-        readingsBulkUpdate( $hash, 'batteryState', $battery );
-        readingsBulkUpdate( $hash, 'success',      $decode_json->{success} );
 
-        readingsBulkUpdate( $hash, 'name',   $decode_json->{name} );
-        readingsBulkUpdate( $hash, 'rssi',   $decode_json->{rssi} );
-        readingsBulkUpdate( $hash, 'paired', $decode_json->{paired} );
+    readingsBeginUpdate($hash);
 
-        Log3( $name, 5, "NUKIDevice ($name) - readings set for $name" );
+    my $t;
+    my $v;
+
+    if ( defined( $decode_json->{lastKnownState} )
+        and ref( $decode_json->{lastKnownState} ) eq 'HASH' )
+    {
+        while ( ( $t, $v ) = each %{ $decode_json->{lastKnownState} } ) {
+            $decode_json->{$t} = $v;
+        }
+
+        delete $decode_json->{lastKnownState};
+    }
+
+    while ( ( $t, $v ) = each %{$decode_json} ) {
+        readingsBulkUpdate( $hash, $t, $v )
+          unless ( $t eq 'state'
+            or $t eq 'mode'
+            or $t eq 'deviceType'
+            or $t eq 'paired'
+            or $t eq 'batteryCritical' );
+        readingsBulkUpdate( $hash, $t, $lockStates{$v}{ $hash->{DEVICETYPE} } )
+          if ( $t eq 'state' );
+        readingsBulkUpdate( $hash, $t, $modes{$v}{ $hash->{DEVICETYPE} } )
+          if ( $t eq 'mode' );
+        readingsBulkUpdate( $hash, $t, $deviceTypes{$v} )
+          if ( $t eq 'deviceType' );
+        readingsBulkUpdate( $hash, $t, ( $v == 1 ? 'true' : 'false' ) )
+          if ( $t eq 'paired' );
+        readingsBulkUpdate( $hash, 'batteryState',
+            ( ( $v eq 'true' or $v == 1 ) ? 'low' : 'ok' ) )
+          if ( $t eq 'batteryCritical' );
     }
 
     readingsEndUpdate( $hash, 1 );
+
+    Log3( $name, 5, "NUKIDevice ($name) - lockAction readings set for $name" );
 
     return undef;
 }

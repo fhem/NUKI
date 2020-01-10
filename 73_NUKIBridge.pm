@@ -113,8 +113,13 @@ if ($@) {
     }
 }
 
-my $version   = '0.7.15';
+my $version   = '0.7.22';
 my $bridgeapi = '1.9';
+
+my %bridgeType = (
+    '1' => 'Hardware',
+    '2' => 'Software'
+);
 
 my %lockActionsSmartLock = (
     'unlock'             => 1,
@@ -312,14 +317,16 @@ sub NUKIBridge_Attr(@) {
 
     if ( $attrName =~ /^webhook.*/ ) {
 
-        my $webhookHttpHostname =
-          (   $attrName eq 'webhookHttpHostname'
+        my $webhookHttpHostname = (
+              $attrName eq 'webhookHttpHostname'
             ? $attrVal
-            : AttrVal( $name, 'webhookHttpHostname', '' ) );
-        my $webhookFWinstance =
-          (   $attrName eq 'webhookFWinstance'
+            : AttrVal( $name, 'webhookHttpHostname', '' )
+        );
+        my $webhookFWinstance = (
+              $attrName eq 'webhookFWinstance'
             ? $attrVal
-            : AttrVal( $name, 'webhookFWinstance', '' ) );
+            : AttrVal( $name, 'webhookFWinstance', '' )
+        );
 
         $hash->{WEBHOOK_URI} = '/'
           . AttrVal( $webhookFWinstance, 'webname', 'fhem' )
@@ -760,16 +767,13 @@ sub NUKIBridge_ResponseProcessing($$$) {
             }
         }
 
-        if ( $path eq 'info' ) {
-            readingsBeginUpdate($hash);
-            readingsBulkUpdate( $hash, 'state', 'connected' );
-            Log3( $name, 5, "NUKIBridge ($name) - Bridge ist online" );
+        NUKIBridge_InfoProcessing( $hash, $decode_json )
+          if ( $path eq 'info' );
 
-            readingsEndUpdate( $hash, 1 );
-            $hash->{helper}{aliveCount} = 0;
+        readingsSingleUpdate( $hash, 'state', 'connected', 1 );
+        Log3( $name, 5, "NUKIBridge ($name) - Bridge ist online" );
 
-            NUKIBridge_InfoProcessing( $hash, $decode_json );
-        }
+        $hash->{helper}{aliveCount} = 0;
     }
     else {
         Log3(
@@ -847,11 +851,6 @@ sub NUKIBridge_InfoProcessing($$) {
     my %response_hash;
     my $dname;
     my $dhash;
-
-    my %bridgeType = (
-        '1' => 'Hardware',
-        '2' => 'Software'
-    );
 
     readingsBeginUpdate($hash);
     readingsBulkUpdate( $hash, 'appVersion',

@@ -474,9 +474,9 @@ sub NUKIDevice_WriteReadings($$) {
     ############################
     #### Status des Smartlock
 
-    my $state;
-
     if ( defined( $hash->{helper}{lockAction} ) ) {
+        my $state;
+
         if (
             defined( $decode_json->{success} )
             and (  $decode_json->{success} eq 'true'
@@ -502,6 +502,7 @@ sub NUKIDevice_WriteReadings($$) {
                 $hash->{DEVICETYPE} );
         }
 
+        $decode_json->{'state'} = $state;
         delete $hash->{helper}{lockAction};
     }
 
@@ -527,7 +528,7 @@ sub NUKIDevice_WriteReadings($$) {
             or $t eq 'deviceType'
             or $t eq 'paired'
             or $t eq 'batteryCritical' );
-        readingsBulkUpdate( $hash, $t, $lockStates{$v}{ $hash->{DEVICETYPE} } )
+        readingsBulkUpdate( $hash, $t, ($v =~ m/^[0-9]$/ ? $lockStates{$v}{ $hash->{DEVICETYPE} } : $v) )
           if ( $t eq 'state' );
         readingsBulkUpdate( $hash, $t, $modes{$v}{ $hash->{DEVICETYPE} } )
           if ( $t eq 'mode' );

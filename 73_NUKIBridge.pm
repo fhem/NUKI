@@ -210,6 +210,7 @@ sub NUKIBridge_Define($$) {
     $hash->{BRIDGEAPI}             = $bridgeapi;
     $hash->{helper}->{aliveCount}  = 0;
     $hash->{helper}->{actionQueue} = [];
+    $hash->{helper}->{iowrite}     = 0;
     my $infix = 'NUKIBridge';
 
     Log3( $name, 3,
@@ -505,14 +506,17 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
     RemoveInternalTimer($hash);
     Log3( $name, 4, "NUKIBridge ($name) - NUKIBridge_GetCheckBridgeAlive" );
 
-    if ( !IsDisabled($name) ) {
+    if ( !IsDisabled($name)
+      and $hash->{helper}->{iowrite} == 0 ) {
 
         NUKIBridge_Write( $hash, 'info', undef, undef, undef );
 
         Log3( $name, 4, "NUKIBridge ($name) - run NUKIBridge_Write" );
     }
 
-    InternalTimer( gettimeofday() + 15 + int( rand(15) ),
+#     InternalTimer( gettimeofday() + 15 + int( rand(15) ),
+#         'NUKIBridge_GetCheckBridgeAlive', $hash );
+    InternalTimer( gettimeofday() + 10,
         'NUKIBridge_GetCheckBridgeAlive', $hash );
 
     Log3( $name, 4,
@@ -597,22 +601,33 @@ sub NUKIBridge_Call($) {
     my $endpoint = $obj->{endpoint};
     my $nukiId   = $obj->{nukiId};
 
-    my $uri = NUKIBridge_CreateUri( $hash, $obj );
+    if ( $hash->{helper}->{iowrite} == 0 ) {
+        my $uri = NUKIBridge_CreateUri( $hash, $obj );
 
-    HttpUtils_NonblockingGet(
-        {
-            url      => $uri,
-            timeout  => 60,
-            hash     => $hash,
-            nukiId   => $nukiId,
-            endpoint => $endpoint,
-            header   => 'Accept: application/json',
-            method   => 'GET',
-            callback => \&NUKIBridge_Distribution,
+        if ( defined($uri) and $uri ) {
+            $hash->{helper}->{iowrite} = 1;
+
+            HttpUtils_NonblockingGet(
+                {
+                    url      => $uri,
+                    timeout  => 30,
+                    hash     => $hash,
+                    nukiId   => $nukiId,
+                    endpoint => $endpoint,
+                    header   => 'Accept: application/json',
+                    method   => 'GET',
+                    callback => \&NUKIBridge_Distribution,
+                }
+            );
+
+            Log3( $name, 4, "NUKIBridge ($name) - Send HTTP POST with URL $uri" );
         }
-    );
-
-    Log3( $name, 4, "NUKIBridge ($name) - Send HTTP POST with URL $uri" );
+    }
+    else {
+        push( @{ $hash->{helper}->{actionQueue} },$obj )
+          if (  defined($endpoint)
+            and $endpoint eq 'lockAction' );
+    }
 }
 
 sub NUKIBridge_Distribution($$$) {
@@ -634,6 +649,9 @@ sub NUKIBridge_Distribution($$$) {
     Log3( $name, 5, "NUKIBridge ($name) - Response ERROR: $err" );
     Log3( $name, 5, "NUKIBridge ($name) - Response CODE: $param->{code}" )
       if ( defined( $param->{code} ) and ( $param->{code} ) );
+      
+    $hash->{helper}->{iowrite} = 0
+      if ( $hash->{helper}->{iowrite} == 1 );
 
     readingsBeginUpdate($hash);
 

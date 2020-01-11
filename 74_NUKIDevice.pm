@@ -361,7 +361,7 @@ sub NUKIDevice_Set($$@) {
 
     $hash->{helper}{lockAction} = $lockAction;
 
-    IOWrite( $hash, "lockAction", $lockAction, $hash->{NUKIID},
+    IOWrite( $hash, 'lockAction', $lockAction, $hash->{NUKIID},
         $hash->{DEVICETYPE} );
 
     return undef;

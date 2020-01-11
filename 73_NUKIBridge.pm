@@ -675,7 +675,6 @@ sub NUKIBridge_Distribution($$$) {
                     $hash->{helper}->{lastDeviceAction}
                 );
                 delete $hash->{helper}->{lastDeviceAction};
-                InternalTimer( gettimeofday() + 1, 'NUKIBridge_Call', $hash );
             }
 
             return;

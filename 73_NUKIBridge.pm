@@ -41,6 +41,7 @@ package main;
 use strict;
 use warnings;
 use HttpUtils;
+use FHEM::Meta;
 
 # try to use JSON::MaybeXS wrapper
 #   for chance of better performance + open code
@@ -113,8 +114,6 @@ if ($@) {
     }
 }
 
-my $version   = '1.9.3';
-my $bridgeapi = '1.9';
 
 my %bridgeType = (
     '1' => 'Hardware',
@@ -158,7 +157,6 @@ sub NUKIBridge_Autocreate($$;$);
 sub NUKIBridge_InfoProcessing($$);
 sub NUKIBridge_getLogfile($$);
 sub NUKIBridge_getCallbackList($$);
-sub NUKIBridge_CallBlocking($@);
 
 sub NUKIBridge_Initialize($) {
     my ($hash) = @_;
@@ -184,16 +182,16 @@ sub NUKIBridge_Initialize($) {
       . 'webhookHttpHostname '
       . $readingFnAttributes;
 
-    foreach my $d ( sort keys %{ $modules{NUKIBridge}{defptr} } ) {
-        my $hash = $modules{NUKIBridge}{defptr}{$d};
-        $hash->{VERSION} = $version;
-    }
+    return FHEM::Meta::InitMod( __FILE__, $hash );
 }
 
 sub NUKIBridge_Define($$) {
     my ( $hash, $def ) = @_;
 
     my @a = split( "[ \t][ \t]*", $def );
+    
+    return $@ unless ( FHEM::Meta::SetInternals($hash) );
+    use version 0.60; our $VERSION = FHEM::Meta::Get( $hash, 'version' );
 
     return ('too few parameters: define <name> NUKIBridge <HOST> <TOKEN>')
       if ( @a != 4 );
@@ -206,8 +204,8 @@ sub NUKIBridge_Define($$) {
     $hash->{HOST}                  = $host;
     $hash->{PORT}                  = $port;
     $hash->{TOKEN}                 = $token;
-    $hash->{VERSION}               = $version;
-    $hash->{BRIDGEAPI}             = $bridgeapi;
+    $hash->{VERSION}               = version->parse($VERSION)->normal;
+    $hash->{BRIDGEAPI}             = FHEM::Meta::Get( $hash, 'x_apiversion' );;
     $hash->{helper}->{aliveCount}  = 0;
     $hash->{helper}->{actionQueue} = [];
     $hash->{helper}->{iowrite}     = 0;
@@ -1073,58 +1071,6 @@ sub NUKIBridge_getCallbackList($$) {
     }
 }
 
-sub NUKIBridge_CallBlocking($@) {
-    my ( $hash, $endpoint, $obj ) = @_;
-
-    my $name  = $hash->{NAME};
-    my $host  = $hash->{HOST};
-    my $port  = $hash->{PORT};
-    my $token = $hash->{TOKEN};
-
-    my $url = 'http://' . $hash->{HOST} . ':' . $port;
-    $url .= '/' . $endpoint
-      if ( defined $endpoint );
-    $url .= '?token=' . $token
-      if ( defined($token) );
-    $url .= '&' . $obj
-      if ( defined($obj) );
-
-    my ( $err, $data ) = HttpUtils_BlockingGet(
-        {
-            url     => $url,
-            timeout => 3,
-            method  => "GET",
-            header  => "Content-Type: application/json",
-        }
-    );
-
-    if ( !$data ) {
-        Log3( $name, 3, "NUKIDevice ($name) - empty answer received for $url" );
-        return undef;
-    }
-    elsif ( $data =~ m'HTTP/1.1 200 OK' ) {
-        Log3( $name, 4, "NUKIDevice ($name) - empty answer received for $url" );
-        return undef;
-    }
-    elsif ( $data !~ m/^[\[{].*[}\]]$/ and $endpoint ne "log" ) {
-        Log3( $name, 3,
-            "NUKIDevice ($name) - invalid json detected for $url: $data" );
-        return ("NUKIDevice ($name) - invalid json detected for $url: $data");
-    }
-
-    my $decode_json = eval { decode_json($data) };
-    if ($@) {
-        Log3( $name, 3, "NUKIBridge ($name) - JSON error while request: $@" );
-        return;
-    }
-
-    return undef if ( !$decode_json );
-
-    Log3( $name, 5, "NUKIBridge ($name) - Data: $data" );
-    Log3( $name, 4, "NUKIBridge ($name) - Blocking HTTP Query finished" );
-    return ($decode_json);
-}
-
 sub NUKIBridge_ParseJSON($$) {
     my ( $hash, $buffer ) = @_;
 
@@ -1326,4 +1272,51 @@ sub NUKIBridge_ParseJSON($$) {
 </ul>
 
 =end html_DE
+
+=for :application/json;q=META.json 73_NUKIBridge.pm
+{
+  "abstract": "Modul to control the Nuki Smartlock's over the Nuki Bridge",
+  "x_lang": {
+    "de": {
+      "abstract": "Modul to control the Nuki Smartlock's over the Nuki Bridge"
+    }
+  },
+  "keywords": [
+    "fhem-mod-device",
+    "fhem-core",
+    "Smartlock",
+    "Nuki",
+    "Control"
+  ],
+  "release_status": "under develop",
+  "license": "GPL_2",
+  "version": "v1.9.3",
+  "x_apiversion": "1.9",
+  "author": [
+    "Marko Oldenburg <leongaultier@gmail.com>"
+  ],
+  "x_fhem_maintainer": [
+    "CoolTux"
+  ],
+  "x_fhem_maintainer_github": [
+    "LeonGaultier"
+  ],
+  "prereqs": {
+    "runtime": {
+      "requires": {
+        "FHEM": 5.00918799,
+        "perl": 5.016, 
+        "Meta": 0,
+        "JSON": 0,
+        "Date::Parse": 0
+      },
+      "recommends": {
+      },
+      "suggests": {
+      }
+    }
+  }
+}
+=end :application/json;q=META.json
+
 =cut

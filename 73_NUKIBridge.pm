@@ -113,7 +113,7 @@ if ($@) {
     }
 }
 
-my $version   = '0.7.31';
+my $version   = '1.8.0';
 my $bridgeapi = '1.9';
 
 my %bridgeType = (

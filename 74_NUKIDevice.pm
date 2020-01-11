@@ -101,7 +101,7 @@ if ($@) {
     }
 }
 
-my $version = '0.7.27';
+my $version = '1.8.0';
 
 # Declare functions
 sub NUKIDevice_Initialize($);

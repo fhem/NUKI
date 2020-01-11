@@ -113,7 +113,7 @@ if ($@) {
     }
 }
 
-my $version   = '0.7.22';
+my $version   = '0.7.31';
 my $bridgeapi = '1.9';
 
 my %bridgeType = (
@@ -150,6 +150,7 @@ sub NUKIBridge_Get($@);
 sub NUKIBridge_GetCheckBridgeAlive($);
 sub NUKIBridge_firstRun($);
 sub NUKIBridge_Write($@);
+sub NUKIBridge_Call($);
 sub NUKIBridge_Distribution($$$);
 sub NUKIBridge_ResponseProcessing($$$);
 sub NUKIBridge_CGI();
@@ -202,13 +203,13 @@ sub NUKIBridge_Define($$) {
     my $token = $a[3];
     my $port  = 8080;
 
-    $hash->{HOST}                 = $host;
-    $hash->{PORT}                 = $port;
-    $hash->{TOKEN}                = $token;
-    $hash->{VERSION}              = $version;
-    $hash->{BRIDGEAPI}            = $bridgeapi;
-    $hash->{helper}->{aliveCount} = 0;
-    $hash->{helper}->{iowrite}    = 0;
+    $hash->{HOST}                  = $host;
+    $hash->{PORT}                  = $port;
+    $hash->{TOKEN}                 = $token;
+    $hash->{VERSION}               = $version;
+    $hash->{BRIDGEAPI}             = $bridgeapi;
+    $hash->{helper}->{aliveCount}  = 0;
+    $hash->{helper}->{actionQueue} = [];
     my $infix = 'NUKIBridge';
 
     Log3( $name, 3,
@@ -504,9 +505,7 @@ sub NUKIBridge_GetCheckBridgeAlive($) {
     RemoveInternalTimer($hash);
     Log3( $name, 4, "NUKIBridge ($name) - NUKIBridge_GetCheckBridgeAlive" );
 
-    if ( !IsDisabled($name)
-        and $hash->{helper}->{iowrite} == 0 )
-    {
+    if ( !IsDisabled($name) ) {
 
         NUKIBridge_Write( $hash, 'info', undef, undef, undef );
 
@@ -536,34 +535,69 @@ sub NUKIBridge_firstRun($) {
 }
 
 sub NUKIBridge_Write($@) {
-    my ( $hash, $path, $obj, $nukiId, $deviceType ) = @_;
+    my ( $hash, $endpoint, $param, $nukiId, $deviceType ) = @_;
 
-    my $name  = $hash->{NAME};
-    my $host  = $hash->{HOST};
-    my $port  = $hash->{PORT};
-    my $token = $hash->{TOKEN};
+    my $obj = {
+        endpoint   => $endpoint,
+        param      => $param,
+        nukiId     => $nukiId,
+        deviceType => $deviceType
+    };
 
-    my $uri = 'http://' . $hash->{HOST} . ':' . $port;
-    $uri .= '/' . $path        if ( defined $path );
+    $hash->{helper}->{lastDeviceAction} = $obj
+      if ( defined($param)
+        and $param );
+
+    unshift( @{ $hash->{helper}->{actionQueue} }, $obj );
+
+    NUKIBridge_Call($hash);
+}
+
+sub NUKIBridge_CreateUri($$) {
+    my ( $hash, $obj ) = @_;
+
+    my $host       = $hash->{HOST};
+    my $port       = $hash->{PORT};
+    my $token      = $hash->{TOKEN};
+    my $endpoint   = $obj->{endpoint};
+    my $param      = $obj->{param};
+    my $nukiId     = $obj->{nukiId};
+    my $deviceType = $obj->{deviceType};
+
+    my $uri = 'http://' . $host . ':' . $port;
+    $uri .= '/' . $endpoint    if ( defined $endpoint );
     $uri .= '?token=' . $token if ( defined($token) );
-    $uri .= '&action=' . $lockActionsSmartLock{$obj}
-      if (  defined($obj)
-        and $path ne 'callback/add'
+    $uri .= '&action=' . $lockActionsSmartLock{$param}
+      if (  defined($param)
+        and $param ne 'callback/add'
         and $deviceType == 0 );
 
-    $uri .= '&action=' . $lockActionsOpener{$obj}
-      if (  defined($obj)
-        and $path ne 'callback/add'
+    $uri .= '&action=' . $lockActionsOpener{$param}
+      if (  defined($param)
+        and $param ne 'callback/add'
         and $deviceType == 2 );
 
-    $uri .= '&url=' . $obj
-      if ( defined($obj)
-        and $path eq 'callback/add' );
+    $uri .= '&url=' . $param
+      if ( defined($param)
+        and $param eq 'callback/add' );
 
     $uri .= '&nukiId=' . $nukiId
       if ( defined($nukiId) );
     $uri .= '&deviceType=' . $deviceType
       if ( defined($deviceType) );
+
+    return $uri;
+}
+
+sub NUKIBridge_Call($) {
+    my $hash = shift;
+
+    my $name     = $hash->{NAME};
+    my $obj      = pop( @{ $hash->{helper}->{actionQueue} } );
+    my $endpoint = $obj->{endpoint};
+    my $nukiId   = $obj->{nukiId};
+
+    my $uri = NUKIBridge_CreateUri( $hash, $obj );
 
     HttpUtils_NonblockingGet(
         {
@@ -571,7 +605,7 @@ sub NUKIBridge_Write($@) {
             timeout  => 60,
             hash     => $hash,
             nukiId   => $nukiId,
-            endpoint => $path,
+            endpoint => $endpoint,
             header   => 'Accept: application/json',
             method   => 'GET',
             callback => \&NUKIBridge_Distribution,
@@ -632,6 +666,18 @@ sub NUKIBridge_Distribution($$$) {
 "NUKIBridge ($name) - Response from Bridge: $param->{code}, $json"
             );
             readingsEndUpdate( $hash, 1 );
+
+            if ( defined( $hash->{helper}->{lastDeviceAction} )
+                and $hash->{helper}->{lastDeviceAction} )
+            {
+                push(
+                    @{ $hash->{helper}->{actionQueue} },
+                    $hash->{helper}->{lastDeviceAction}
+                );
+                delete $hash->{helper}->{lastDeviceAction};
+                InternalTimer( gettimeofday() + 1, 'NUKIBridge_Call', $hash );
+            }
+
             return;
         }
 
@@ -666,6 +712,10 @@ sub NUKIBridge_Distribution($$$) {
         return $param->{code};
     }
 
+    delete $hash->{helper}->{lastDeviceAction}
+      if ( defined( $hash->{helper}->{lastDeviceAction} )
+        and $hash->{helper}->{lastDeviceAction} );
+
     readingsEndUpdate( $hash, 1 );
 
     if ( $hash == $dhash ) {
@@ -684,14 +734,15 @@ sub NUKIBridge_Distribution($$$) {
         Dispatch( $hash, $json, undef );
     }
 
-    $hash->{helper}->{iowrite} = 0
-      if ( $hash->{helper}->{iowrite} == 1 );
+    InternalTimer( gettimeofday() + 1, 'NUKIBridge_Call', $hash )
+      if ( defined( $hash->{helper}->{actionQueue} )
+        and scalar( @{ $hash->{helper}->{actionQueue} } ) > 0 );
 
     return undef;
 }
 
 sub NUKIBridge_ResponseProcessing($$$) {
-    my ( $hash, $json, $path ) = @_;
+    my ( $hash, $json, $endpoint ) = @_;
 
     my $name = $hash->{NAME};
     my $decode_json;
@@ -715,25 +766,25 @@ sub NUKIBridge_ResponseProcessing($$$) {
         return;
     }
 
-    if (   $path eq 'list'
-        or $path eq 'info' )
+    if (   $endpoint eq 'list'
+        or $endpoint eq 'info' )
     {
         if (
             (
                     ref($decode_json) eq 'ARRAY'
                 and scalar( @{$decode_json} ) > 0
-                and $path eq 'list'
+                and $endpoint eq 'list'
             )
             or (    ref( $decode_json->{scanResults} ) eq 'ARRAY'
                 and scalar( @{ $decode_json->{scanResults} } ) > 0
-                and $path eq 'info' )
+                and $endpoint eq 'info' )
           )
         {
             my @buffer;
             @buffer = split( '\[', $json )
-              if ( $path eq 'list' );
+              if ( $endpoint eq 'list' );
             @buffer = split( '"scanResults": \[', $json )
-              if ( $path eq 'info' );
+              if ( $endpoint eq 'info' );
 
             my ( $json, $tail ) = NUKIBridge_ParseJSON( $hash, $buffer[1] );
 
@@ -768,7 +819,7 @@ sub NUKIBridge_ResponseProcessing($$$) {
         }
 
         NUKIBridge_InfoProcessing( $hash, $decode_json )
-          if ( $path eq 'info' );
+          if ( $endpoint eq 'info' );
 
         readingsSingleUpdate( $hash, 'state', 'connected', 1 );
         Log3( $name, 5, "NUKIBridge ($name) - Bridge ist online" );
@@ -965,7 +1016,7 @@ processed"
 }
 
 sub NUKIBridge_CallBlocking($@) {
-    my ( $hash, $path, $obj ) = @_;
+    my ( $hash, $endpoint, $obj ) = @_;
 
     my $name  = $hash->{NAME};
     my $host  = $hash->{HOST};
@@ -973,8 +1024,8 @@ sub NUKIBridge_CallBlocking($@) {
     my $token = $hash->{TOKEN};
 
     my $url = 'http://' . $hash->{HOST} . ':' . $port;
-    $url .= '/' . $path
-      if ( defined $path );
+    $url .= '/' . $endpoint
+      if ( defined $endpoint );
     $url .= '?token=' . $token
       if ( defined($token) );
     $url .= '&' . $obj
@@ -997,7 +1048,7 @@ sub NUKIBridge_CallBlocking($@) {
         Log3( $name, 4, "NUKIDevice ($name) - empty answer received for $url" );
         return undef;
     }
-    elsif ( $data !~ m/^[\[{].*[}\]]$/ and $path ne "log" ) {
+    elsif ( $data !~ m/^[\[{].*[}\]]$/ and $endpoint ne "log" ) {
         Log3( $name, 3,
             "NUKIDevice ($name) - invalid json detected for $url: $data" );
         return ("NUKIDevice ($name) - invalid json detected for $url: $data");

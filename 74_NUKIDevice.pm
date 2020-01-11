@@ -329,18 +329,6 @@ sub NUKIDevice_Set($$@) {
 
         NUKIDevice_GetUpdate($hash);
         return undef;
-
-    }
-    elsif ( $cmd eq 'unpair' ) {
-        return ('usage: unpair') if ( @args != 0 );
-
-        if ( !IsDisabled($name) ) {
-            $hash->{IODev}->{helper}->{iowrite} = 1
-              if ( $hash->{IODev}->{helper}->{iowrite} == 0 );
-            IOWrite( $hash, $cmd, undef, $hash->{NUKIID}, $hash->{DEVICETYPE} );
-        }
-
-        return undef;
     }
     elsif ($cmd eq 'lock'
         or lc($cmd) eq 'deactivaterto'
@@ -351,7 +339,8 @@ sub NUKIDevice_Set($$@) {
         or lc($cmd) eq 'lockngo'
         or lc($cmd) eq 'activatecontinuousmode'
         or lc($cmd) eq 'lockngowithunlatch'
-        or lc($cmd) eq 'deactivatecontinuousmode' )
+        or lc($cmd) eq 'deactivatecontinuousmode'
+        or $cmd eq 'unpair' )
     {
         return ( 'usage: ' . $cmd )
           if ( @args != 0 );
@@ -371,8 +360,7 @@ sub NUKIDevice_Set($$@) {
     }
 
     $hash->{helper}{lockAction} = $lockAction;
-    $hash->{IODev}->{helper}->{iowrite} = 1
-      if ( $hash->{IODev}->{helper}->{iowrite} == 0 );
+
     IOWrite( $hash, "lockAction", $lockAction, $hash->{NUKIID},
         $hash->{DEVICETYPE} );
 
@@ -529,7 +517,8 @@ sub NUKIDevice_WriteReadings($$) {
             or $t eq 'paired'
             or $t eq 'batteryCritical'
             or $t eq 'timestamp' );
-        readingsBulkUpdate( $hash, $t, ($v =~ m/^[0-9]$/ ? $lockStates{$v}{ $hash->{DEVICETYPE} } : $v) )
+        readingsBulkUpdate( $hash, $t,
+            ( $v =~ m/^[0-9]$/ ? $lockStates{$v}{ $hash->{DEVICETYPE} } : $v ) )
           if ( $t eq 'state' );
         readingsBulkUpdate( $hash, $t, $modes{$v}{ $hash->{DEVICETYPE} } )
           if ( $t eq 'mode' );

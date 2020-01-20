@@ -1091,32 +1091,30 @@ sub getCallbackList($$) {
             Log3( $name, 4,
                 "NUKIBridge ($name) - created Table with log file" );
 
-            my $space = '&nbsp;';
-            my $aHref;
-            my $header = '<html>'
-                . '<div style="float: left">Callback List</div>';
 
-            my $ret = $header.'<table width=100%><tr><td>';
-            $ret .= '<table class="block wide">';
-            $ret .= '<tr class="odd">';
-            $ret .= '<td><b>URL</b></td>';
-            $ret .= '<td><b>Remove</b></td>';
-            $ret .= '</tr>';
+            my $j1 = '<script type=\"text/javascript\">{';
+                $j1 .= 'function callbackRemove(){}';
+                $j1 .= '}</script>';
+                
+#                 FW_cmd(FW_root+"?cmd="+type+" "+dev+
+#                 (params[0]=="state" ? "":" "+params[0])+" "+arg+"&XHR=1");
+            
+
+            my $header = '<html>';
+            my $footer = '</html>';
+
+            my $ret = '<div style="float: left">Callback List</div>'
+                . '<table width=100%><tr><td>'
+                . '<table class="block wide">'
+                . '<tr class="odd">'
+                . '<td><b>URL</b></td>'
+                . '<td><b>Remove</b></td>'
+                . '</tr>';
 
             if ( scalar( @{ $decode_json->{callbacks} } ) > 0 ) {
                 foreach my $cb ( @{ $decode_json->{callbacks} } ) {
-                    $aHref =
-                        "<a href=\""
-                    . $::FW_httpheader->{host}
-                    . "/fhem?cmd=set+"
-                    . $name
-                    . "+callbackRemove+"
-                    . $cb->{id}
-                    . $::FW_CSRF
-                    . "\"><font color=\"red\"><b>X</b></font></a>";
-
                     $ret .= '<td>' . $cb->{url} . '</td>';
-                    $ret .= '<td>'.$aHref.'</td>';
+                    $ret .= '<td><input disabled title=\"callbackRemove\" name=\"callbackRemove\" type=\"button\"  value=\"Remove\" onclick =\"javascript: callbackRemove()\"></td>';
                     $ret .= '</tr>';
                 }
             }
@@ -1128,9 +1126,9 @@ sub getCallbackList($$) {
             }
 
             $ret .= '</table></td></tr>';
-            $ret .= '</table></html>';
+            $ret .= '</table>';
 
-            asyncOutput( $param->{cl}, $ret )
+            asyncOutput( $param->{cl}, $header . $ret . $j1 . $footer )
               if ( $param->{cl} and $param->{cl}{canAsyncOutput} );
             return;
         }

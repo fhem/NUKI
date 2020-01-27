@@ -1092,8 +1092,8 @@ sub getCallbackList($$) {
                 "NUKIBridge ($name) - created Table with log file" );
 
 
-            my $j1 = '<script type=\"text/javascript\">{';
-                $j1 .= 'function callbackRemove(){}';
+            my $j1 = '<script language=\"javascript\" type=\"text/javascript\">{';
+                $j1 .= "function callbackRemove(){FW_cmd(FW_root+'?cmd=get $name callbackList&XHR=1')}";
                 $j1 .= '}</script>';
                 
 #                 FW_cmd(FW_root+"?cmd="+type+" "+dev+
@@ -1114,7 +1114,7 @@ sub getCallbackList($$) {
             if ( scalar( @{ $decode_json->{callbacks} } ) > 0 ) {
                 foreach my $cb ( @{ $decode_json->{callbacks} } ) {
                     $ret .= '<td>' . $cb->{url} . '</td>';
-                    $ret .= '<td><input disabled title=\"callbackRemove\" name=\"callbackRemove\" type=\"button\"  value=\"Remove\" onclick =\"javascript: callbackRemove()\"></td>';
+                    $ret .= "<td><input title=\"CallbackRemove\" name=\"Remove\" type=\"button\"  value=\"Remove\" onclick=\" javascript: callbackRemove() \"></td>";
                     $ret .= '</tr>';
                 }
             }

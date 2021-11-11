@@ -2,7 +2,7 @@
 #
 # Developed with Kate
 #
-#  (c) 2016-2020 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
+#  (c) 2016-2021 Copyright: Marko Oldenburg (fhemdevelopment at cooltux dot net)
 #  All rights reserved
 #
 #  This script is free software; you can redistribute it and/or modify
@@ -370,7 +370,8 @@ sub Attr(@) {
               . $hash->{WEBHOOK_URI};
 
             Log3( $name, 3, "NUKIBridge ($name) - URL ist: $url" );
-            Write( $hash, 'callback/add', $url, undef, undef )
+#             Write( $hash, 'callback/add', $url, undef, undef )
+            Write( $hash, 'callback/add', '{"param":"' . $url . '}' )
               if ($init_done);
             $hash->{WEBHOOK_REGISTER} = 'sent';
         }
@@ -444,54 +445,48 @@ sub Set($@) {
     my ( $hash, $name, $cmd, @args ) = @_;
 
     my ( $arg, @params ) = @args;
+    my $endpoint;
 
     if ( lc($cmd) eq 'getdevicelist' ) {
         return 'usage: getDeviceList' if ( @args != 0 );
 
-        Write( $hash, 'list', undef, undef, undef )
-          if ( !IsDisabled($name) );
-        return undef;
+        $endpoint = 'list';
     }
     elsif ( $cmd eq 'info' ) {
         return 'usage: statusRequest' if ( @args != 0 );
 
-        Write( $hash, 'info', undef, undef, undef )
-          if ( !IsDisabled($name) );
-        return undef;
+        $endpoint = 'info';
     }
     elsif ( lc($cmd) eq 'fwupdate' ) {
         return 'usage: fwUpdate' if ( @args != 0 );
 
-        Write( $hash, 'fwupdate', undef, undef, undef )
-          if ( !IsDisabled($name) );
-        return undef;
+        $endpoint = 'fwupdate';
     }
     elsif ( $cmd eq 'reboot' ) {
         return 'usage: reboot' if ( @args != 0 );
 
-        Write( $hash, 'reboot', undef, undef, undef )
-          if ( !IsDisabled($name) );
-        return undef;
+        $endpoint = 'reboot';
     }
     elsif ( lc($cmd) eq 'clearlog' ) {
         return 'usage: clearLog' if ( @args != 0 );
 
-        Write( $hash, 'clearlog', undef, undef, undef )
-          if ( !IsDisabled($name) );
+        $endpoint = 'clearlog';
     }
     elsif ( lc($cmd) eq 'factoryreset' ) {
         return 'usage: clearLog' if ( @args != 0 );
 
-        Write( $hash, 'factoryReset', undef, undef, undef )
-          if ( !IsDisabled($name) );
+        $endpoint = 'factoryReset';
     }
     elsif ( lc($cmd) eq 'callbackremove' ) {
         return 'usage: callbackRemove' if ( @args > 1 );
 
         my $id = ( @args > 0 ? join( ' ', @args ) : 0 );
 
-        Write( $hash, 'callback/remove', $id, undef, undef )
+#         Write( $hash, 'callback/remove', $id, undef, undef )
+        Write( $hash, 'callback/remove', '{"param":"' . $id . '}' )
           if ( !IsDisabled($name) );
+          
+        return undef;
     }
     else {
         my $list = '';
@@ -500,22 +495,26 @@ sub Set($@) {
           if ( ReadingsVal( $name, 'bridgeType', 'Software' ) eq 'Hardware' );
         return ( 'Unknown argument ' . $cmd . ', choose one of ' . $list );
     }
+    
+    Write( $hash, $endpoint, undef )
+        if ( !IsDisabled($name) );
 }
 
 sub Get($@) {
     my ( $hash, $name, $cmd, @args ) = @_;
 
     my ( $arg, @params ) = @args;
+    my $endpoint;
 
     if ( lc($cmd) eq 'logfile' ) {
         return 'usage: logFile' if ( @args != 0 );
 
-        Write( $hash, 'log', undef, undef, undef );
+        $endpoint = 'log';
     }
     elsif ( lc($cmd) eq 'callbacklist' ) {
         return 'usage: callbackList' if ( @args != 0 );
 
-        Write( $hash, 'callback/list', undef, undef, undef );
+        $endpoint = 'callback/list';
     }
     else {
         my $list = '';
@@ -525,6 +524,8 @@ sub Get($@) {
 
         return 'Unknown argument ' . $cmd . ', choose one of ' . $list;
     }
+    
+    Write( $hash, $endpoint, undef )
 }
 
 sub GetCheckBridgeAlive($) {
@@ -539,7 +540,7 @@ sub GetCheckBridgeAlive($) {
         and $hash->{helper}->{iowrite} == 0 )
     {
 
-        Write( $hash, 'info', undef, undef, undef );
+        Write( $hash, 'info', undef);
 
         Log3( $name, 4, "NUKIBridge ($name) - run Write" );
     }
@@ -557,7 +558,7 @@ sub FirstRun($) {
     my $name = $hash->{NAME};
 
     RemoveInternalTimer($hash);
-    Write( $hash, 'list', undef, undef, undef )
+    Write( $hash, 'list', undef )
       if ( !IsDisabled($name) );
     InternalTimer( gettimeofday() + 5,
         'NUKIBridge_GetCheckBridgeAlive', $hash );
@@ -566,7 +567,14 @@ sub FirstRun($) {
 }
 
 sub Write($@) {
-    my ( $hash, $endpoint, $param, $nukiId, $deviceType ) = @_;
+    my ( $hash, $endpoint, $json ) = @_;
+    
+    my $decode_json = eval { decode_json($json) }
+      if ( defined($json) );
+    
+    my $nukiId = $decode_json->{nukiId} // undef;
+    my $deviceType = $decode_json->{deviceType} // undef;
+    my $param = $decode_json->{param} // undef;
 
     my $obj = {
         endpoint   => $endpoint,
@@ -1354,7 +1362,7 @@ sub ParseJSON($$) {
   ],
   "release_status": "stable",
   "license": "GPL_2",
-  "version": "v1.9.16",
+  "version": "v1.9.17",
   "x_apiversion": "1.9",
   "author": [
     "Marko Oldenburg <leongaultier@gmail.com>"

@@ -371,7 +371,7 @@ sub Attr(@) {
 
             Log3( $name, 3, "NUKIBridge ($name) - URL ist: $url" );
 #             Write( $hash, 'callback/add', $url, undef, undef )
-            Write( $hash, 'callback/add', '{"param":"' . $url . '}' )
+            Write( $hash, 'callback/add', '{"param":"' . $url . '"}' )
               if ($init_done);
             $hash->{WEBHOOK_REGISTER} = 'sent';
         }
@@ -483,7 +483,7 @@ sub Set($@) {
         my $id = ( @args > 0 ? join( ' ', @args ) : 0 );
 
 #         Write( $hash, 'callback/remove', $id, undef, undef )
-        Write( $hash, 'callback/remove', '{"param":"' . $id . '}' )
+        Write( $hash, 'callback/remove', '{"param":"' . $id . '"}' )
           if ( !IsDisabled($name) );
           
         return undef;
@@ -918,7 +918,7 @@ sub ResponseProcessing($$$) {
             }
         }
 
-        InfoProcessing( $hash, $decode_json )
+        WriteReadings( $hash, $decode_json )
           if ( $endpoint eq 'info' );
     }
     else {
@@ -987,7 +987,7 @@ matching NukiId at device $name"
     return ( 'text/plain; charset=utf-8', 'Call failure: ' . $request );
 }
 
-sub InfoProcessing($$) {
+sub WriteReadings($$) {
     my ( $hash, $decode_json ) = @_;
 
     my $name = $hash->{NAME};
@@ -1010,7 +1010,7 @@ sub InfoProcessing($$) {
     readingsBulkUpdate( $hash, 'hardwareId',  $decode_json->{ids}{hardwareId} );
     readingsBulkUpdate( $hash, 'serverId',    $decode_json->{ids}{serverId} );
     readingsBulkUpdate( $hash, 'uptime',      $decode_json->{uptime} );
-    readingsBulkUpdate( $hash, 'currentTime', $decode_json->{currentTime} );
+    readingsBulkUpdate( $hash, 'currentGMTime', $decode_json->{currentTime} );
     readingsBulkUpdate( $hash, 'serverConnected',
         $decode_json->{serverConnected} );
     readingsEndUpdate( $hash, 1 );
@@ -1099,6 +1099,72 @@ sub getCallbackList($$) {
             Log3( $name, 4,
                 "NUKIBridge ($name) - created Table with log file" );
 
+            my $space = '&nbsp;';
+            my $aHref;
+            my $header = '<html>'
+                . '<div style="float: left">Callback List</div>';
+
+            my $ret = $header.'<table width=100%><tr><td>';
+            $ret .= '<table class="block wide">';
+            $ret .= '<tr class="odd">';
+            $ret .= '<td><b>URL</b></td>';
+            $ret .= '<td><b>Remove</b></td>';
+            $ret .= '</tr>';
+
+            if ( scalar( @{ $decode_json->{callbacks} } ) > 0 ) {
+                foreach my $cb ( @{ $decode_json->{callbacks} } ) {
+                    $aHref =
+                        "<a href=\""
+                    . $::FW_httpheader->{host}
+                    . "/fhem?cmd=set+"
+                    . $name
+                    . "+callbackRemove+"
+                    . $cb->{id}
+                    . $::FW_CSRF
+                    . "\"><font color=\"red\"><b>X</b></font></a>";
+
+                    $ret .= '<td>' . $cb->{url} . '</td>';
+                    $ret .= '<td>'.$aHref.'</td>';
+                    $ret .= '</tr>';
+                }
+            }
+            else {
+                $ret .= '<td>none</td>';
+                $ret .= '<td>none</td>';
+                $ret .= '<td> </td>';
+                $ret .= '</tr>';
+            }
+
+            $ret .= '</table></td></tr>';
+            $ret .= '</table></html>';
+
+            asyncOutput( $param->{cl}, $ret )
+              if ( $param->{cl} and $param->{cl}{canAsyncOutput} );
+            return;
+        }
+    }
+}
+
+sub getCallbackList2($$) {
+    my ( $param, $json ) = @_;
+
+    my $hash = $param->{hash};
+    my $name = $hash->{NAME};
+
+    my $decode_json = eval { decode_json($json) };
+    if ($@) {
+        Log3( $name, 3, "NUKIBridge ($name) - JSON error while request: $@" );
+        return;
+    }
+
+    Log3( $name, 4,
+        "NUKIBridge ($name) - Callback data are collected and processed" );
+
+    if ( $param->{cl} and $param->{cl}->{TYPE} eq 'FHEMWEB' ) {
+        if ( ref( $decode_json->{callbacks} ) eq 'ARRAY' ) {
+            Log3( $name, 4,
+                "NUKIBridge ($name) - created Table with Callback List" );
+
 
             my $j1 = '<script language=\"javascript\" type=\"text/javascript\">{';
                 $j1 .= "function callbackRemove(){FW_cmd(FW_root+'?cmd=get $name callbackList&XHR=1')}";
@@ -1135,6 +1201,9 @@ sub getCallbackList($$) {
 
             $ret .= '</table></td></tr>';
             $ret .= '</table>';
+            
+            Log3( $name, 4,
+                "NUKIBridge ($name) - Callback List Table created and call asyncOutput Fn" );
 
             asyncOutput( $param->{cl}, $header . $ret . $j1 . $footer )
               if ( $param->{cl} and $param->{cl}{canAsyncOutput} );
@@ -1362,7 +1431,7 @@ sub ParseJSON($$) {
   ],
   "release_status": "stable",
   "license": "GPL_2",
-  "version": "v1.9.17",
+  "version": "v1.9.30",
   "x_apiversion": "1.9",
   "author": [
     "Marko Oldenburg <leongaultier@gmail.com>"

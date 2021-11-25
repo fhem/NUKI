@@ -35,19 +35,14 @@
 #
 
 ################################
-
-package main;
-
-use strict;
-use warnings;
-
-package FHEM::NUKIBridge;
+FHEM::Devices::Nuki::Bridge;
 
 use strict;
 use warnings;
-use HttpUtils;
+
 use FHEM::Meta;
-use GPUtils qw(GP_Import GP_Export);
+use HttpUtils;
+
 
 # try to use JSON::MaybeXS wrapper
 #   for chance of better performance + open code
@@ -120,49 +115,9 @@ if ($@) {
     }
 }
 
-## Import der FHEM Funktionen
-#-- Run before package compilation
-BEGIN {
+######## Begin Bridge
 
-    # Import from main context
-    GP_Import(
-        qw(
-          readingsSingleUpdate
-          readingsBulkUpdate
-          readingsBeginUpdate
-          readingsEndUpdate
-          readingFnAttributes
-          defs
-          modules
-          Log3
-          CommandAttr
-          AttrVal
-          IsDisabled
-          deviceEvents
-          init_done
-          gettimeofday
-          InternalTimer
-          InternalVal
-          ReadingsVal
-          RemoveInternalTimer
-          HttpUtils_NonblockingGet
-          asyncOutput
-          data
-          TimeNow
-          devspec2array
-          Dispatch)
-    );
-}
-
-#-- Export to main context with different name
-GP_Export(
-    qw(
-      GetCheckBridgeAlive
-      Initialize
-      CGI
-      BridgeCall
-      )
-);
+sub ::NUKIBridge_Initialize { goto &Initialize }
 
 my %bridgeType = (
     '1' => 'Hardware',
@@ -189,7 +144,7 @@ sub Initialize($) {
     my ($hash) = @_;
 
     # Provider
-    $hash->{WriteFn}   = 'FHEM::NUKIBridge::Write';
+    $hash->{WriteFn}   = \&Write;
     $hash->{Clients}   = ':NUKIDevice:';
     $hash->{MatchList} = { '1:NUKIDevice' => '^{.*}$' };
 
@@ -197,18 +152,18 @@ sub Initialize($) {
       join( ",", devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
 
     # Consumer
-    $hash->{SetFn}    = 'FHEM::NUKIBridge::Set';
-    $hash->{GetFn}    = 'FHEM::NUKIBridge::Get';
-    $hash->{DefFn}    = 'FHEM::NUKIBridge::Define';
-    $hash->{UndefFn}  = 'FHEM::NUKIBridge::Undef';
-    $hash->{NotifyFn} = 'FHEM::NUKIBridge::Notify';
-    $hash->{AttrFn}   = 'FHEM::NUKIBridge::Attr';
+    $hash->{SetFn}    = \&Set;
+    $hash->{GetFn}    = \&Get;
+    $hash->{DefFn}    = \&Define;
+    $hash->{UndefFn}  = \&Undef;
+    $hash->{NotifyFn} = \&Notify;
+    $hash->{AttrFn}   = \&Attr;
     $hash->{AttrList} =
         'disable:1 '
       . 'webhookFWinstance:'
       . $webhookFWinstance . ' '
       . 'webhookHttpHostname '
-      . $readingFnAttributes;
+      . $::readingFnAttributes;
 
     return FHEM::Meta::InitMod( __FILE__, $hash );
 }
@@ -229,36 +184,36 @@ sub Define($$) {
     my $token = $a[3];
     my $port  = 8080;
 
-    $hash->{HOST}                  = $host;
-    $hash->{PORT}                  = $port;
-    $hash->{TOKEN}                 = $token;
-    $hash->{NOTIFYDEV}             = 'global,' . $name;
-    $hash->{VERSION}               = version->parse($VERSION)->normal;
-    $hash->{BRIDGEAPI}             = FHEM::Meta::Get( $hash, 'x_apiversion' );
-    $hash->{helper}->{actionQueue} = [];
-    $hash->{helper}->{iowrite}     = 0;
-    my $infix = 'NUKIBridge';
+    $hash->{HOST}                   = $host;
+    $hash->{PORT}                   = $port;
+    $hash->{TOKEN}                  = $token;
+    $hash->{NOTIFYDEV}              = 'global,' . $name;
+    $hash->{VERSION}                = version->parse($VERSION)->normal;
+    $hash->{BRIDGEAPI}              = FHEM::Meta::Get( $hash, 'x_apiversion' );
+    $hash->{helper}->{actionQueue}  = [];
+    $hash->{helper}->{iowrite}      = 0;
+    my $infix                       = 'NUKIBridge';
 
-    Log3( $name, 3,
+    ::Log3( $name, 3,
 "NUKIBridge ($name) - defined with host $host on port $port, Token $token"
     );
 
-    CommandAttr( undef, $name . ' room NUKI' )
-      if ( AttrVal( $name, 'room', 'none' ) eq 'none' );
+    ::CommandAttr( undef, $name . ' room NUKI' )
+      if ( ::AttrVal( $name, 'room', 'none' ) eq 'none' );
 
-    if ( addExtension( $name, 'NUKIBridge_CGI', $infix . "-" . $host ) ) {
+    if ( ::addExtension( $name, 'NUKIBridge_CGI', $infix . "-" . $host ) ) {
         $hash->{fhem}{infix} = $infix;
     }
 
     $hash->{WEBHOOK_REGISTER} = "unregistered";
 
-    readingsSingleUpdate( $hash, 'state', 'Initialized', 1 );
+    ::readingsSingleUpdate( $hash, 'state', 'Initialized', 1 );
 
-    RemoveInternalTimer($hash);
+    ::RemoveInternalTimer($hash);
 
-    $modules{NUKIBridge}{defptr}{ $hash->{HOST} } = $hash;
+    $::modules{NUKIBridge}{defptr}{ $hash->{HOST} } = $hash;
 
-    return undef;
+    return;
 }
 
 sub Undef($$) {
@@ -268,41 +223,41 @@ sub Undef($$) {
     my $name = $hash->{NAME};
 
     if ( defined( $hash->{fhem}{infix} ) ) {
-        removeExtension( $hash->{fhem}{infix} );
+        ::removeExtension( $hash->{fhem}{infix} );
     }
 
-    RemoveInternalTimer($hash);
-    delete $modules{NUKIBridge}{defptr}{ $hash->{HOST} };
+    ::RemoveInternalTimer($hash);
+    delete $::modules{NUKIBridge}{defptr}{ $hash->{HOST} };
 
-    return undef;
+    return;
 }
 
 sub Attr(@) {
     my ( $cmd, $name, $attrName, $attrVal ) = @_;
 
-    my $hash = $defs{$name};
+    my $hash = $::defs{$name};
     my $orig = $attrVal;
 
     if ( $attrName eq 'disable' ) {
-        if ( $cmd eq 'set' and $attrVal == 1 ) {
-            readingsSingleUpdate( $hash, 'state', 'disabled', 1 );
-            Log3( $name, 3, "NUKIBridge ($name) - disabled" );
+        if ( $cmd eq 'set' && $attrVal == 1 ) {
+            ::readingsSingleUpdate( $hash, 'state', 'disabled', 1 );
+            ::Log3( $name, 3, "NUKIBridge ($name) - disabled" );
         }
         elsif ( $cmd eq 'del' ) {
-            readingsSingleUpdate( $hash, 'state', 'active', 1 );
-            Log3( $name, 3, "NUKIBridge ($name) - enabled" );
+            ::readingsSingleUpdate( $hash, 'state', 'active', 1 );
+            ::Log3( $name, 3, "NUKIBridge ($name) - enabled" );
         }
     }
 
     if ( $attrName eq 'disabledForIntervals' ) {
         if ( $cmd eq 'set' ) {
-            Log3( $name, 3,
+            ::Log3( $name, 3,
                 "NUKIBridge ($name) - enable disabledForIntervals" );
-            readingsSingleUpdate( $hash, 'state', 'Unknown', 1 );
+            ::readingsSingleUpdate( $hash, 'state', 'Unknown', 1 );
         }
         elsif ( $cmd eq 'del' ) {
-            readingsSingleUpdate( $hash, 'state', 'active', 1 );
-            Log3( $name, 3,
+            ::readingsSingleUpdate( $hash, 'state', 'active', 1 );
+            ::Log3( $name, 3,
                 "NUKIBridge ($name) - delete disabledForIntervals" );
         }
     }
@@ -313,50 +268,52 @@ sub Attr(@) {
     return (
 "Invalid value for attribute $attrName: can only by FQDN or IPv4 or IPv6 address"
       )
-      if (  $attrVal
-        and $attrName eq 'webhookHttpHostname'
-        and $attrVal !~ /^([A-Za-z_.0-9]+\.[A-Za-z_.0-9]+)|[0-9:]+$/ );
+      if ( $attrVal
+        && $attrName eq 'webhookHttpHostname'
+        && $attrVal !~ /^([A-Za-z_.0-9]+\.[A-Za-z_.0-9]+)|[0-9:]+$/ );
 
     return (
 "Invalid value for attribute $attrName: FHEMWEB instance $attrVal not existing"
       )
-      if (  $attrVal
-        and $attrName eq 'webhookFWinstance'
-        and
-        ( !defined( $defs{$attrVal} ) or $defs{$attrVal}{TYPE} ne 'FHEMWEB' ) );
+      if ( $attrVal
+        && $attrName eq 'webhookFWinstance'
+        &&
+        ( !defined( $::defs{$attrVal} ) || $::defs{$attrVal}{TYPE} ne 'FHEMWEB' ) );
 
     return (
         "Invalid value for attribute $attrName: needs to be an integer value")
-      if ( $attrVal and $attrName eq 'webhookPort' and $attrVal !~ /^\d+$/ );
+      if ( $attrVal && $attrName eq 'webhookPort'
+        && $attrVal !~ /^\d+$/ );
 
     if ( $attrName =~ /^webhook.*/ ) {
 
         my $webhookHttpHostname = (
               $attrName eq 'webhookHttpHostname'
             ? $attrVal
-            : AttrVal( $name, 'webhookHttpHostname', '' )
+            : ::AttrVal( $name, 'webhookHttpHostname', '' )
         );
+
         my $webhookFWinstance = (
               $attrName eq 'webhookFWinstance'
             ? $attrVal
-            : AttrVal( $name, 'webhookFWinstance', '' )
+            : ::AttrVal( $name, 'webhookFWinstance', '' )
         );
 
         $hash->{WEBHOOK_URI} = '/'
-          . AttrVal( $webhookFWinstance, 'webname', 'fhem' )
+          . ::AttrVal( $webhookFWinstance, 'webname', 'fhem' )
           . '/NUKIBridge' . '-'
           . $hash->{HOST};
         $hash->{WEBHOOK_PORT} = (
-            $attrName eq 'webhookPort' ? $attrVal : AttrVal(
+            $attrName eq 'webhookPort' ? $attrVal : ::AttrVal(
                 $name, 'webhookPort',
-                InternalVal( $webhookFWinstance, 'PORT', '' )
+                ::InternalVal( $webhookFWinstance, 'PORT', '' )
             )
         );
 
         $hash->{WEBHOOK_URL}     = '';
         $hash->{WEBHOOK_COUNTER} = 0;
 
-        if ( $webhookHttpHostname ne '' and $hash->{WEBHOOK_PORT} ne '' ) {
+        if ( $webhookHttpHostname ne '' && $hash->{WEBHOOK_PORT} ne '' ) {
 
             $hash->{WEBHOOK_URL} =
                 'http://'
@@ -369,10 +326,10 @@ sub Attr(@) {
               . $hash->{WEBHOOK_PORT}
               . $hash->{WEBHOOK_URI};
 
-            Log3( $name, 3, "NUKIBridge ($name) - URL ist: $url" );
+            ::Log3( $name, 3, "NUKIBridge ($name) - URL ist: $url" );
 #             Write( $hash, 'callback/add', $url, undef, undef )
             Write( $hash, 'callback/add', '{"param":"' . $url . '"}' )
-              if ($init_done);
+              if ($::init_done);
             $hash->{WEBHOOK_REGISTER} = 'sent';
         }
         else {
@@ -380,18 +337,18 @@ sub Attr(@) {
         }
     }
 
-    return undef;
+    return;
 }
 
 sub Notify($$) {
 
     my ( $hash, $dev ) = @_;
     my $name = $hash->{NAME};
-    return if ( IsDisabled($name) );
+    return if ( ::IsDisabled($name) );
 
     my $devname = $dev->{NAME};
     my $devtype = $dev->{TYPE};
-    my $events  = deviceEvents( $dev, 1 );
+    my $events  = ::deviceEvents( $dev, 1 );
     return if ( !$events );
 
     FirstRun($hash)
@@ -406,8 +363,8 @@ sub Notify($$) {
             or grep /^DEFINED.$name$/,
             @{$events}
         )
-        and $devname eq 'global'
-        and $init_done
+         && $devname eq 'global'
+         && $::init_done
       );
 
     return;
@@ -418,13 +375,13 @@ sub addExtension($$$) {
 
     my $url = '/' . $link;
 
-    Log3( $name, 2,
+    ::Log3( $name, 2,
         "NUKIBridge ($name) - Registering NUKIBridge for webhook URI $url ..."
     );
 
-    $data{FWEXT}{$url}{deviceName} = $name;
-    $data{FWEXT}{$url}{FUNC}       = $func;
-    $data{FWEXT}{$url}{LINK}       = $link;
+    $::data{FWEXT}{$url}{deviceName} = $name;
+    $::data{FWEXT}{$url}{FUNC}       = $func;
+    $::data{FWEXT}{$url}{LINK}       = $link;
 
     return 1;
 }
@@ -433,12 +390,14 @@ sub removeExtension($) {
     my ($link) = @_;
 
     my $url  = '/' . $link;
-    my $name = $data{FWEXT}{$url}{deviceName};
+    my $name = $::data{FWEXT}{$url}{deviceName};
 
-    Log3( $name, 2,
+    ::Log3( $name, 2,
         "NUKIBridge ($name) - Unregistering NUKIBridge for webhook URL $url..."
     );
-    delete $data{FWEXT}{$url};
+    delete $::data{FWEXT}{$url};
+    
+    return;
 }
 
 sub Set($@) {
@@ -483,8 +442,8 @@ sub Set($@) {
         my $id = ( @args > 0 ? join( ' ', @args ) : 0 );
 
 #         Write( $hash, 'callback/remove', $id, undef, undef )
-        Write( $hash, 'callback/remove', '{"param":"' . $id . '"}' )
-          if ( !IsDisabled($name) );
+        ::Write( $hash, 'callback/remove', '{"param":"' . $id . '"}' )
+          if ( !::IsDisabled($name) );
           
         return undef;
     }
@@ -492,12 +451,14 @@ sub Set($@) {
         my $list = '';
         $list .= 'info:noArg getDeviceList:noArg ';
         $list .= 'clearLog:noArg fwUpdate:noArg reboot:noArg factoryReset:noArg'
-          if ( ReadingsVal( $name, 'bridgeType', 'Software' ) eq 'Hardware' );
+          if ( ::ReadingsVal( $name, 'bridgeType', 'Software' ) eq 'Hardware' );
         return ( 'Unknown argument ' . $cmd . ', choose one of ' . $list );
     }
     
-    Write( $hash, $endpoint, undef )
-        if ( !IsDisabled($name) );
+    ::Write( $hash, $endpoint, undef )
+        if ( !::IsDisabled($name) );
+        
+    return;
 }
 
 sub Get($@) {
@@ -520,12 +481,12 @@ sub Get($@) {
         my $list = '';
         $list .= 'callbackList:noArg ';
         $list .= 'logFile:noArg'
-          if ( ReadingsVal( $name, 'bridgeType', 'Software' ) eq 'Hardware' );
+          if ( ::ReadingsVal( $name, 'bridgeType', 'Software' ) eq 'Hardware' );
 
         return 'Unknown argument ' . $cmd . ', choose one of ' . $list;
     }
     
-    Write( $hash, $endpoint, undef )
+    return ::Write( $hash, $endpoint, undef )
 }
 
 sub GetCheckBridgeAlive($) {
@@ -533,23 +494,22 @@ sub GetCheckBridgeAlive($) {
 
     my $name = $hash->{NAME};
 
-    RemoveInternalTimer($hash);
-    Log3( $name, 4, "NUKIBridge ($name) - GetCheckBridgeAlive" );
+    ::RemoveInternalTimer($hash);
+    ::Log3( $name, 4, "NUKIBridge ($name) - GetCheckBridgeAlive" );
 
-    if ( !IsDisabled($name)
-        and $hash->{helper}->{iowrite} == 0 )
+    if ( !::IsDisabled($name)
+      && $hash->{helper}->{iowrite} == 0 )
     {
+        ::Write( $hash, 'info', undef);
 
-        Write( $hash, 'info', undef);
-
-        Log3( $name, 4, "NUKIBridge ($name) - run Write" );
+        ::Log3( $name, 4, "NUKIBridge ($name) - run Write" );
     }
-
-    InternalTimer( gettimeofday() + 30,
-        'NUKIBridge_GetCheckBridgeAlive', $hash );
-
-    Log3( $name, 4,
+    
+    ::Log3( $name, 4,
         "NUKIBridge ($name) - Call InternalTimer for GetCheckBridgeAlive" );
+    
+    return ::InternalTimer( gettimeofday() + 30,
+        \&FHEM::Devices::Nuki::Bridge::GetCheckBridgeAlive, $hash );
 }
 
 sub FirstRun($) {
@@ -557,13 +517,12 @@ sub FirstRun($) {
 
     my $name = $hash->{NAME};
 
-    RemoveInternalTimer($hash);
-    Write( $hash, 'list', undef )
-      if ( !IsDisabled($name) );
-    InternalTimer( gettimeofday() + 5,
-        'NUKIBridge_GetCheckBridgeAlive', $hash );
-
-    return undef;
+    ::RemoveInternalTimer($hash);
+    ::Write( $hash, 'list', undef )
+      if ( !::IsDisabled($name) );
+      
+    return ::InternalTimer( gettimeofday() + 5,
+        \&FHEM::Devices::Nuki::Bridge::GetCheckBridgeAlive, $hash );
 }
 
 sub Write($@) {
@@ -585,14 +544,14 @@ sub Write($@) {
 
     $hash->{helper}->{lastDeviceAction} = $obj
       if (
-        ( defined($param) and $param )
-        or ( defined($nukiId)
-            and $nukiId )
+        ( defined($param) && $param )
+        || ( defined($nukiId)
+          && $nukiId )
       );
 
     unshift( @{ $hash->{helper}->{actionQueue} }, $obj );
 
-    BridgeCall($hash);
+    return BridgeCall($hash);
 }
 
 sub CreateUri($$) {
@@ -611,32 +570,33 @@ sub CreateUri($$) {
     $uri .= '/' . $endpoint if ( defined $endpoint );
     $uri .= '?token=' . $token if ( defined($token) );
 
-    if (    defined($param)
-        and defined($deviceType) )
+    if (   defined($param)
+        && defined($deviceType) )
     {
         $uri .= '&action=' . $lockActionsSmartLock{$param}
-          if (  $endpoint ne 'callback/add'
-            and $deviceType == 0 );
+          if ( $endpoint ne 'callback/add'
+            && $deviceType == 0 );
 
         $uri .= '&action=' . $lockActionsOpener{$param}
-          if (  $endpoint ne 'callback/add'
-            and $deviceType == 2 );
+          if ( $endpoint ne 'callback/add'
+            && $deviceType == 2 );
     }
 
     $uri .= '&id=' . $param
       if ( defined($param)
-        and $endpoint eq 'callback/remove' );
+        && $endpoint eq 'callback/remove' );
 
     $uri .= '&url=' . $param
       if ( defined($param)
-        and $endpoint eq 'callback/add' );
+        && $endpoint eq 'callback/add' );
 
     $uri .= '&nukiId=' . $nukiId
       if ( defined($nukiId) );
     $uri .= '&deviceType=' . $deviceType
       if ( defined($deviceType) );
 
-    Log3( $name, 4, "NUKIBridge ($name) - created uri: $uri" );
+    ::Log3( $name, 4, "NUKIBridge ($name) - created uri: $uri" );
+    
     return $uri;
 }
 
@@ -651,7 +611,7 @@ sub BridgeCall($) {
     if ( $hash->{helper}->{iowrite} == 0 ) {
         my $uri = CreateUri( $hash, $obj );
 
-        if ( defined($uri) and $uri ) {
+        if ( defined($uri) && $uri ) {
             $hash->{helper}->{iowrite} = 1;
 
             my $param = {
@@ -668,22 +628,24 @@ sub BridgeCall($) {
             $param->{cl} = $hash->{CL}
               if (
                 (
-                       $endpoint eq 'callback/list'
-                    or $endpoint eq 'log'
+                     $endpoint eq 'callback/list'
+                  || $endpoint eq 'log'
                 )
-                and ref( $hash->{CL} ) eq 'HASH'
+                && ref( $hash->{CL} ) eq 'HASH'
               );
 
-            HttpUtils_NonblockingGet($param);
-            Log3( $name, 4,
+            ::HttpUtils_NonblockingGet($param);
+            ::Log3( $name, 4,
                 "NUKIBridge ($name) - Send HTTP POST with URL $uri" );
         }
     }
     else {
         push( @{ $hash->{helper}->{actionQueue} }, $obj )
           if ( defined($endpoint)
-            and $endpoint eq 'lockAction' );
+            && $endpoint eq 'lockAction' );
     }
+    
+    return;
 }
 
 sub Distribution($$$) {
@@ -697,103 +659,111 @@ sub Distribution($$$) {
     my $dhash = $hash;
 
     $dhash = $modules{NUKIDevice}{defptr}{ $param->{'nukiId'} }
-      unless ( not defined( $param->{'nukiId'} ) );
+      if ( defined( $param->{'nukiId'} ) );
 
     my $dname = $dhash->{NAME};
 
-    Log3( $name, 4, "NUKIBridge ($name) - Response JSON: $json" );
-    Log3( $name, 4, "NUKIBridge ($name) - Response ERROR: $err" );
-    Log3( $name, 4, "NUKIBridge ($name) - Response CODE: $param->{code}" )
-      if ( defined( $param->{code} ) and ( $param->{code} ) );
+    ::Log3( $name, 4, "NUKIBridge ($name) - Response JSON: $json" );
+    ::Log3( $name, 4, "NUKIBridge ($name) - Response ERROR: $err" );
+    ::Log3( $name, 4, "NUKIBridge ($name) - Response CODE: $param->{code}" )
+      if ( defined($param->{code})
+        && $param->{code} );
 
     $hash->{helper}->{iowrite} = 0
       if ( $hash->{helper}->{iowrite} == 1 );
 
-    readingsBeginUpdate($hash);
+    ::readingsBeginUpdate($hash);
 
     if ( defined($err) ) {
         if ( $err ne '' ) {
             if ( $param->{endpoint} eq 'info' ) {
-                readingsBulkUpdate( $hash, 'state', 'not connected' );
-                Log3( $name, 5, "NUKIBridge ($name) - Bridge ist offline" );
+                ::readingsBulkUpdate( $hash, 'state', 'not connected' );
+                ::Log3( $name, 5, "NUKIBridge ($name) - Bridge ist offline" );
             }
 
-            readingsBulkUpdate( $hash, 'lastError', $err )
-              if ( ReadingsVal( $name, 'state', 'not connected' ) eq
+            ::readingsBulkUpdate( $hash, 'lastError', $err )
+              if ( ::ReadingsVal( $name, 'state', 'not connected' ) eq
                 'not connected' );
 
-            Log3( $name, 4,
+            ::Log3( $name, 4,
                 "NUKIBridge ($name) - error while requesting: $err" );
-            readingsEndUpdate( $hash, 1 );
+            ::readingsEndUpdate( $hash, 1 );
 
-            asyncOutput( $param->{cl}, "Request Error: $err\r\n" )
+            ::asyncOutput( $param->{cl}, "Request Error: $err\r\n" )
               if ( $param->{cl} && $param->{cl}{canAsyncOutput} );
 
             return $err;
         }
     }
 
-    if (    ( $json eq '' or $json =~ /Unavailable/i )
-        and exists( $param->{code} )
-        and $param->{code} != 200 )
+    if (   ( $json eq ''
+          || $json =~ /Unavailable/i )
+        && exists( $param->{code} )
+        && $param->{code} != 200 )
     {
-        if ( $param->{code} == 503 and $json eq 'HTTP 503 Unavailable' ) {
-            Log3( $name, 4,
-"NUKIBridge ($name) - Response from Bridge: $param->{code}, $json"
-            );
-            readingsEndUpdate( $hash, 1 );
+
+        if ( $param->{code} == 503
+          && $json eq 'HTTP 503 Unavailable' )
+        {
+            ::Log3( $name, 4,
+"NUKIBridge ($name) - Response from Bridge: $param->{code}, $json" );
+
+            ::readingsEndUpdate( $hash, 1 );
 
             if ( defined( $hash->{helper}->{lastDeviceAction} )
-                and $hash->{helper}->{lastDeviceAction} )
+              && $hash->{helper}->{lastDeviceAction} )
             {
                 push(
                     @{ $hash->{helper}->{actionQueue} },
                     $hash->{helper}->{lastDeviceAction}
                 );
 
-                InternalTimer( gettimeofday() + 1,
-                    'NUKIBridge_BridgeCall', $hash );
+                ::InternalTimer( gettimeofday() + 1,
+                    \&FHEM::Devices::Nuki::Bridge::BridgeCall, $hash );
             }
 
-            asyncOutput( $param->{cl}, "Request Error: $err\r\n" )
+            ::asyncOutput( $param->{cl}, "Request Error: $err\r\n" )
               if ( $param->{cl} && $param->{cl}{canAsyncOutput} );
 
             return;
         }
 
-        readingsBulkUpdate( $hash, 'lastError',
+        ::readingsBulkUpdate( $hash, 'lastError',
             'Internal error, ' . $param->{code} );
-        Log3( $name, 4,
+        ::Log3( $name, 4,
                 "NUKIBridge ($name) - received http code "
               . $param->{code}
               . " without any data after requesting" );
 
-        readingsEndUpdate( $hash, 1 );
+        ::readingsEndUpdate( $hash, 1 );
+        
+        ::asyncOutput( $param->{cl}, "Request Error: $err\r\n" )
+          if ( $param->{cl} && $param->{cl}{canAsyncOutput} );
+
         return ('received http code '
               . $param->{code}
               . ' without any data after requesting' );
-
-        asyncOutput( $param->{cl}, "Request Error: $err\r\n" )
-          if ( $param->{cl} && $param->{cl}{canAsyncOutput} );
     }
 
-    if ( ( $json =~ /Error/i ) and exists( $param->{code} ) ) {
+    if ( ($json =~ /Error/i )
+       && exists($param->{code}) )
+    {
 
-        readingsBulkUpdate( $hash, 'lastError', 'invalid API token' )
+        ::readingsBulkUpdate( $hash, 'lastError', 'invalid API token' )
           if ( $param->{code} == 401 );
-        readingsBulkUpdate( $hash, 'lastError', 'action is undefined' )
-          if ( $param->{code} == 400 and $hash == $dhash );
+        ::readingsBulkUpdate( $hash, 'lastError', 'action is undefined' )
+          if ( $param->{code} == 400 && $hash == $dhash );
 
-        Log3( $name, 4, "NUKIBridge ($name) - invalid API token" )
+        ::Log3( $name, 4, "NUKIBridge ($name) - invalid API token" )
           if ( $param->{code} == 401 );
-        Log3( $name, 4, "NUKIBridge ($name) - nukiId is not known" )
+        ::Log3( $name, 4, "NUKIBridge ($name) - nukiId is not known" )
           if ( $param->{code} == 404 );
-        Log3( $name, 4, "NUKIBridge ($name) - action is undefined" )
-          if ( $param->{code} == 400 and $hash == $dhash );
+        ::Log3( $name, 4, "NUKIBridge ($name) - action is undefined" )
+          if ( $param->{code} == 400 && $hash == $dhash );
 
-        readingsEndUpdate( $hash, 1 );
+        ::readingsEndUpdate( $hash, 1 );
 
-        asyncOutput( $param->{cl}, "Request Error: $err\r\n" )
+        ::asyncOutput( $param->{cl}, "Request Error: $err\r\n" )
           if ( $param->{cl} && $param->{cl}{canAsyncOutput} );
 
         return $param->{code};
@@ -801,12 +771,12 @@ sub Distribution($$$) {
 
     delete $hash->{helper}->{lastDeviceAction}
       if ( defined( $hash->{helper}->{lastDeviceAction} )
-        and $hash->{helper}->{lastDeviceAction} );
+        && $hash->{helper}->{lastDeviceAction} );
 
-    readingsEndUpdate( $hash, 1 );
+    ::readingsEndUpdate( $hash, 1 );
 
-    readingsSingleUpdate( $hash, 'state', 'connected', 1 );
-    Log3( $name, 5, "NUKIBridge ($name) - Bridge ist online" );
+    ::readingsSingleUpdate( $hash, 'state', 'connected', 1 );
+    ::Log3( $name, 5, "NUKIBridge ($name) - Bridge ist online" );
 
     if ( $param->{endpoint} eq 'callback/list' ) {
         getCallbackList( $param, $json );
@@ -830,14 +800,15 @@ sub Distribution($$$) {
 
         $decode_json->{nukiId} = $param->{nukiId};
         $json = encode_json($decode_json);
-        Dispatch( $hash, $json, undef );
+
+        ::Dispatch( $hash, $json, undef );
     }
 
-    InternalTimer( gettimeofday() + 3, 'NUKIBridge_BridgeCall', $hash )
+    ::InternalTimer( gettimeofday() + 3, \&FHEM::Devices::Nuki::Bridge::BridgeCall, $hash )
       if ( defined( $hash->{helper}->{actionQueue} )
-        and scalar( @{ $hash->{helper}->{actionQueue} } ) > 0 );
+        && scalar( @{ $hash->{helper}->{actionQueue} } ) > 0 );
 
-    return undef;
+    return;
 }
 
 sub ResponseProcessing($$$) {
@@ -847,37 +818,37 @@ sub ResponseProcessing($$$) {
     my $decode_json;
 
     if ( !$json ) {
-        Log3( $name, 3, "NUKIBridge ($name) - empty answer received" );
-        return undef;
+        ::Log3( $name, 3, "NUKIBridge ($name) - empty answer received" );
+        return;
     }
     elsif ( $json =~ m'HTTP/1.1 200 OK' ) {
-        Log3( $name, 4, "NUKIBridge ($name) - empty answer received" );
-        return undef;
+        ::Log3( $name, 4, "NUKIBridge ($name) - empty answer received" );
+        return;
     }
     elsif ( $json !~ m/^[\[{].*[}\]]$/ ) {
-        Log3( $name, 3, "NUKIBridge ($name) - invalid json detected: $json" );
+        ::Log3( $name, 3, "NUKIBridge ($name) - invalid json detected: $json" );
         return ("NUKIBridge ($name) - invalid json detected: $json");
     }
 
     $decode_json = eval { decode_json($json) };
     if ($@) {
-        Log3( $name, 3, "NUKIBridge ($name) - JSON error while request: $@" );
+        ::Log3( $name, 3, "NUKIBridge ($name) - JSON error while request: $@" );
         return;
     }
 
     if (   $endpoint eq 'list'
-        or $endpoint eq 'info' )
+        || $endpoint eq 'info' )
     {
         if (
             (
-                    ref($decode_json) eq 'ARRAY'
-                and scalar( @{$decode_json} ) > 0
-                and $endpoint eq 'list'
+                   ref($decode_json) eq 'ARRAY'
+                && scalar( @{$decode_json} ) > 0
+                && $endpoint eq 'list'
             )
-            or (    ref($decode_json) eq 'HASH'
-                and ref( $decode_json->{scanResults} ) eq 'ARRAY'
-                and scalar( @{ $decode_json->{scanResults} } ) > 0
-                and $endpoint eq 'info' )
+            || (   ref($decode_json) eq 'HASH'
+                && ref( $decode_json->{scanResults} ) eq 'ARRAY'
+                && scalar( @{ $decode_json->{scanResults} } ) > 0
+                && $endpoint eq 'info' )
           )
         {
             my @buffer;
@@ -889,13 +860,13 @@ sub ResponseProcessing($$$) {
             my ( $json, $tail ) = ParseJSON( $hash, $buffer[1] );
 
             while ($json) {
-                Log3( $name, 5,
+                ::Log3( $name, 5,
                         "NUKIBridge ($name) - Decoding JSON message. Length: "
                       . length($json)
                       . " Content: "
                       . $json );
 
-                Log3( $name, 5,
+                ::Log3( $name, 5,
                         "NUKIBridge ($name) - Vor Sub: Laenge JSON: "
                       . length($json)
                       . " Content: "
@@ -903,12 +874,13 @@ sub ResponseProcessing($$$) {
                       . " Tail: "
                       . $tail );
 
-                Dispatch( $hash, $json, undef )
-                  unless ( not defined($tail) and not($tail) );
+                ::Dispatch( $hash, $json, undef )
+                  if ( defined($tail)
+                    && $tail );
 
                 ( $json, $tail ) = ParseJSON( $hash, $tail );
 
-                Log3( $name, 5,
+                ::Log3( $name, 5,
                         "NUKIBridge ($name) - Nach Sub: Laenge JSON: "
                       . length($json)
                       . " Content: "
@@ -920,16 +892,15 @@ sub ResponseProcessing($$$) {
 
         WriteReadings( $hash, $decode_json )
           if ( $endpoint eq 'info' );
-    }
-    else {
-        Log3(
-            $name, 5, "NUKIBridge ($name) - Rückgabe Path nicht korrekt: 
-$json"
-        );
+
         return;
     }
+    else {
 
-    return undef;
+        return ::Log3(
+            $name, 5, "NUKIBridge ($name) - Rückgabe Path nicht korrekt: $json"
+        );
+    }
 }
 
 sub CGI() {
@@ -937,54 +908,56 @@ sub CGI() {
 
     my $hash;
     my $name;
-    while ( my ( $key, $value ) = each %{ $modules{NUKIBridge}{defptr} } ) {
-        $hash = $modules{NUKIBridge}{defptr}{$key};
+
+    while ( my ( $key, $value ) = each %{ $::modules{NUKIBridge}{defptr} } ) {
+        $hash = $::modules{NUKIBridge}{defptr}{$key};
         $name = $hash->{NAME};
     }
 
     return ('NUKIBridge WEBHOOK - No IODev found')
-      unless ( defined($hash) and defined($name) );
+      if ( !defined($hash)
+        && !defined($name) );
 
     my $json = ( split( '&', $request, 2 ) )[1];
 
     if ( !$json ) {
-        Log3( $name, 3, "NUKIBridge WEBHOOK ($name) - empty message received" );
-        return undef;
+        ::Log3( $name, 3, "NUKIBridge WEBHOOK ($name) - empty message received" );
+        return;
     }
     elsif ( $json =~ m'HTTP/1.1 200 OK' ) {
-        Log3( $name, 4, "NUKIBridge WEBHOOK ($name) - empty answer received" );
-        return undef;
+        ::Log3( $name, 4, "NUKIBridge WEBHOOK ($name) - empty answer received" );
+        return;
     }
     elsif ( $json !~ m/^[\[{].*[}\]]$/ ) {
-        Log3( $name, 3,
+        ::Log3( $name, 3,
             "NUKIBridge WEBHOOK ($name) - invalid json detected: $json" );
         return ("NUKIBridge WEBHOOK ($name) - invalid json detected: $json");
     }
 
-    Log3( $name, 5,
+    ::Log3( $name, 5,
         "NUKIBridge WEBHOOK ($name) - Webhook received with JSON: $json" );
 
     if ( $json =~ m/^\{.*\}$/ ) {
         $hash->{WEBHOOK_COUNTER}++;
         $hash->{WEBHOOK_LAST} = TimeNow();
 
-        Log3(
-            $name, 4, "NUKIBridge WEBHOOK ($name) - Received webhook for 
+        ::Log3(
+            $name, 3, "NUKIBridge WEBHOOK ($name) - Received webhook for 
 matching NukiId at device $name"
         );
 
-        Dispatch( $hash, $json, undef );
+        ::Dispatch( $hash, $json, undef );
 
-        return ( undef, undef );
+        return(undef,undef);
     }
 
     # no data received
     else {
-        Log3( $name, 4,
+        ::Log3( $name, 4,
             "NUKIBridge WEBHOOK - received malformed request\n$request" );
     }
 
-    return ( 'text/plain; charset=utf-8', 'Call failure: ' . $request );
+    ::return ( 'text/plain; charset=utf-8', 'Call failure: ' . $request );
 }
 
 sub WriteReadings($$) {
@@ -998,22 +971,24 @@ sub WriteReadings($$) {
     my $dname;
     my $dhash;
 
-    readingsBeginUpdate($hash);
-    readingsBulkUpdate( $hash, 'appVersion',
+    ::readingsBeginUpdate($hash);
+    ::readingsBulkUpdate( $hash, 'appVersion',
         $decode_json->{versions}->{appVersion} );
-    readingsBulkUpdate( $hash, 'firmwareVersion',
+    ::readingsBulkUpdate( $hash, 'firmwareVersion',
         $decode_json->{versions}->{firmwareVersion} );
-    readingsBulkUpdate( $hash, 'wifiFirmwareVersion',
+    ::readingsBulkUpdate( $hash, 'wifiFirmwareVersion',
         $decode_json->{versions}->{wifiFirmwareVersion} );
-    readingsBulkUpdate( $hash, 'bridgeType',
+    ::readingsBulkUpdate( $hash, 'bridgeType',
         $bridgeType{ $decode_json->{bridgeType} } );
-    readingsBulkUpdate( $hash, 'hardwareId',  $decode_json->{ids}{hardwareId} );
-    readingsBulkUpdate( $hash, 'serverId',    $decode_json->{ids}{serverId} );
-    readingsBulkUpdate( $hash, 'uptime',      $decode_json->{uptime} );
-    readingsBulkUpdate( $hash, 'currentGMTime', $decode_json->{currentTime} );
-    readingsBulkUpdate( $hash, 'serverConnected',
+    ::readingsBulkUpdate( $hash, 'hardwareId',  $decode_json->{ids}{hardwareId} );
+    ::readingsBulkUpdate( $hash, 'serverId',    $decode_json->{ids}{serverId} );
+    ::readingsBulkUpdate( $hash, 'uptime',      $decode_json->{uptime} );
+    ::readingsBulkUpdate( $hash, 'currentGMTime', $decode_json->{currentTime} );
+    ::readingsBulkUpdate( $hash, 'serverConnected',
         $decode_json->{serverConnected} );
-    readingsEndUpdate( $hash, 1 );
+    ::readingsEndUpdate( $hash, 1 );
+    
+    return;
 }
 
 sub getLogfile($$) {
@@ -1024,16 +999,21 @@ sub getLogfile($$) {
 
     my $decode_json = eval { decode_json($json) };
     if ($@) {
-        Log3( $name, 3, "NUKIBridge ($name) - JSON error while request: $@" );
+        ::Log3( $name, 3, "NUKIBridge ($name) - JSON error while request: $@" );
         return;
     }
 
-    Log3( $name, 4,
+    ::Log3( $name, 4,
         "NUKIBridge ($name) - Log data are collected and processed" );
 
-    if ( $param->{cl} and $param->{cl}->{TYPE} eq 'FHEMWEB' ) {
-        if ( ref($decode_json) eq 'ARRAY' and scalar( @{$decode_json} ) > 0 ) {
-            Log3( $name, 4,
+    if ( $param->{cl}
+      && $param->{cl}->{TYPE} eq 'FHEMWEB' )
+    {
+
+        if ( ref($decode_json) eq 'ARRAY'
+          && scalar( @{$decode_json} ) > 0 )
+        {
+            ::Log3( $name, 4,
                 "NUKIBridge ($name) - created Table with log file" );
 
             my $header = '<html>'
@@ -1042,7 +1022,7 @@ sub getLogfile($$) {
             my $ret = $header.'<table width=100%><tr><td>';
             $ret .= '<table class="block wide">';
 
-            foreach my $logs ( @{$decode_json} ) {
+            for my $logs ( @{$decode_json} ) {
                 $ret .= '<tr class="odd">';
 
                 if ( $logs->{timestamp} ) {
@@ -1057,7 +1037,7 @@ sub getLogfile($$) {
                     $ret .= '<td> </td>';
                 }
 
-                foreach my $d ( reverse sort keys %{$logs} ) {
+                for my $d ( reverse sort keys %{$logs} ) {
                     next if ( $d eq 'type' );
                     next if ( $d eq 'timestamp' );
 
@@ -1072,11 +1052,13 @@ sub getLogfile($$) {
             $ret .= '</table></td></tr>';
             $ret .= '</table></html>';
 
-            asyncOutput( $param->{cl}, $ret )
-              if ( $param->{cl} and $param->{cl}{canAsyncOutput} );
-            return;
+            ::asyncOutput( $param->{cl}, $ret )
+              if ( $param->{cl}
+                && $param->{cl}{canAsyncOutput} );
         }
     }
+    
+    return;
 }
 
 sub getCallbackList($$) {
@@ -1087,16 +1069,19 @@ sub getCallbackList($$) {
 
     my $decode_json = eval { decode_json($json) };
     if ($@) {
-        Log3( $name, 3, "NUKIBridge ($name) - JSON error while request: $@" );
+        ::Log3( $name, 3, "NUKIBridge ($name) - JSON error while request: $@" );
         return;
     }
 
-    Log3( $name, 4,
+    ::Log3( $name, 4,
         "NUKIBridge ($name) - Callback data are collected and processed" );
 
-    if ( $param->{cl} and $param->{cl}->{TYPE} eq 'FHEMWEB' ) {
+    if ( $param->{cl}
+      && $param->{cl}->{TYPE} eq 'FHEMWEB' )
+    {
+
         if ( ref( $decode_json->{callbacks} ) eq 'ARRAY' ) {
-            Log3( $name, 4,
+            ::Log3( $name, 4,
                 "NUKIBridge ($name) - created Table with log file" );
 
             my $space = '&nbsp;';
@@ -1112,7 +1097,7 @@ sub getCallbackList($$) {
             $ret .= '</tr>';
 
             if ( scalar( @{ $decode_json->{callbacks} } ) > 0 ) {
-                foreach my $cb ( @{ $decode_json->{callbacks} } ) {
+                for my $cb ( @{ $decode_json->{callbacks} } ) {
                     $aHref =
                         "<a href=\""
                     . $::FW_httpheader->{host}
@@ -1138,11 +1123,13 @@ sub getCallbackList($$) {
             $ret .= '</table></td></tr>';
             $ret .= '</table></html>';
 
-            asyncOutput( $param->{cl}, $ret )
-              if ( $param->{cl} and $param->{cl}{canAsyncOutput} );
-            return;
+            ::asyncOutput( $param->{cl}, $ret )
+              if ( $param->{cl}
+                && $param->{cl}{canAsyncOutput} );
         }
     }
+    
+    return;
 }
 
 sub getCallbackList2($$) {
@@ -1153,16 +1140,19 @@ sub getCallbackList2($$) {
 
     my $decode_json = eval { decode_json($json) };
     if ($@) {
-        Log3( $name, 3, "NUKIBridge ($name) - JSON error while request: $@" );
+        ::Log3( $name, 3, "NUKIBridge ($name) - JSON error while request: $@" );
         return;
     }
 
-    Log3( $name, 4,
+    ::Log3( $name, 4,
         "NUKIBridge ($name) - Callback data are collected and processed" );
 
-    if ( $param->{cl} and $param->{cl}->{TYPE} eq 'FHEMWEB' ) {
+    if ( $param->{cl}
+      && $param->{cl}->{TYPE} eq 'FHEMWEB' )
+    {
+
         if ( ref( $decode_json->{callbacks} ) eq 'ARRAY' ) {
-            Log3( $name, 4,
+            ::Log3( $name, 4,
                 "NUKIBridge ($name) - created Table with Callback List" );
 
 
@@ -1186,7 +1176,7 @@ sub getCallbackList2($$) {
                 . '</tr>';
 
             if ( scalar( @{ $decode_json->{callbacks} } ) > 0 ) {
-                foreach my $cb ( @{ $decode_json->{callbacks} } ) {
+                for my $cb ( @{ $decode_json->{callbacks} } ) {
                     $ret .= '<td>' . $cb->{url} . '</td>';
                     $ret .= "<td><input title=\"CallbackRemove\" name=\"Remove\" type=\"button\"  value=\"Remove\" onclick=\" javascript: callbackRemove() \"></td>";
                     $ret .= '</tr>';
@@ -1202,14 +1192,16 @@ sub getCallbackList2($$) {
             $ret .= '</table></td></tr>';
             $ret .= '</table>';
             
-            Log3( $name, 4,
+            ::Log3( $name, 4,
                 "NUKIBridge ($name) - Callback List Table created and call asyncOutput Fn" );
 
-            asyncOutput( $param->{cl}, $header . $ret . $j1 . $footer )
-              if ( $param->{cl} and $param->{cl}{canAsyncOutput} );
-            return;
+            ::asyncOutput( $param->{cl}, $header . $ret . $j1 . $footer )
+              if ( $param->{cl}
+                && $param->{cl}{canAsyncOutput} );
         }
     }
+    
+    return;
 }
 
 sub ParseJSON($$) {
@@ -1222,29 +1214,28 @@ sub ParseJSON($$) {
     my $tail  = '';
 
     if ($buffer) {
-        foreach my $c ( split //, $buffer ) {
-            if ( $open == $close and $open > 0 ) {
+        for my $c ( split //, $buffer ) {
+
+            if ( $open == $close
+              && $open > 0 )
+            {
                 $tail .= $c;
-                Log3( $name, 5,
+                ::Log3( $name, 5,
                     "NUKIBridge ($name) - $open == $close and $open > 0" );
 
             }
-            elsif ( ( $open == $close ) and ( $c ne '{' ) ) {
-
-                Log3( $name, 5,
+            elsif ( $open == $close
+                 && $c ne '{' )
+            {
+                ::Log3( $name, 5,
                     "NUKIBridge ($name) - Garbage character before message: "
                       . $c );
-
             }
             else {
-
                 if ( $c eq '{' ) {
-
                     $open++;
-
                 }
                 elsif ( $c eq '}' ) {
-
                     $close++;
                 }
 
@@ -1259,11 +1250,19 @@ sub ParseJSON($$) {
         }
     }
 
-    Log3( $name, 5, "NUKIBridge ($name) - return msg: $msg and tail: $tail" );
+    ::Log3( $name, 5, "NUKIBridge ($name) - return msg: $msg and tail: $tail" );
+
     return ( $msg, $tail );
 }
 
+
+
+
+
+
+
 1;
+
 
 =pod
 =item device

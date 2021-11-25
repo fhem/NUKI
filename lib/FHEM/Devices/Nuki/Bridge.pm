@@ -149,7 +149,7 @@ sub Initialize($) {
     $hash->{MatchList} = { '1:NUKIDevice' => '^{.*}$' };
 
     my $webhookFWinstance =
-      join( ",", devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
+      join( ",", ::devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
 
     # Consumer
     $hash->{SetFn}    = \&Set;
@@ -201,7 +201,7 @@ sub Define($$) {
     ::CommandAttr( undef, $name . ' room NUKI' )
       if ( ::AttrVal( $name, 'room', 'none' ) eq 'none' );
 
-    if ( ::addExtension( $name, 'NUKIBridge_CGI', $infix . "-" . $host ) ) {
+    if ( addExtension( $name, 'NUKIBridge_CGI', $infix . "-" . $host ) ) {
         $hash->{fhem}{infix} = $infix;
     }
 
@@ -223,7 +223,7 @@ sub Undef($$) {
     my $name = $hash->{NAME};
 
     if ( defined( $hash->{fhem}{infix} ) ) {
-        ::removeExtension( $hash->{fhem}{infix} );
+        removeExtension( $hash->{fhem}{infix} );
     }
 
     ::RemoveInternalTimer($hash);
@@ -288,15 +288,17 @@ sub Attr(@) {
     if ( $attrName =~ /^webhook.*/ ) {
 
         my $webhookHttpHostname = (
-              $attrName eq 'webhookHttpHostname'
-            ? $attrVal
-            : ::AttrVal( $name, 'webhookHttpHostname', '' )
+               $attrName eq 'webhookHttpHostname'
+            && defined($attrVal)
+             ? $attrVal
+             : ::AttrVal( $name, 'webhookHttpHostname', '' )
         );
 
         my $webhookFWinstance = (
-              $attrName eq 'webhookFWinstance'
-            ? $attrVal
-            : ::AttrVal( $name, 'webhookFWinstance', '' )
+               $attrName eq 'webhookFWinstance'
+            && defined($attrVal)
+             ? $attrVal
+             : ::AttrVal( $name, 'webhookFWinstance', '' )
         );
 
         $hash->{WEBHOOK_URI} = '/'
@@ -442,7 +444,7 @@ sub Set($@) {
         my $id = ( @args > 0 ? join( ' ', @args ) : 0 );
 
 #         Write( $hash, 'callback/remove', $id, undef, undef )
-        ::Write( $hash, 'callback/remove', '{"param":"' . $id . '"}' )
+        Write( $hash, 'callback/remove', '{"param":"' . $id . '"}' )
           if ( !::IsDisabled($name) );
           
         return undef;
@@ -455,7 +457,7 @@ sub Set($@) {
         return ( 'Unknown argument ' . $cmd . ', choose one of ' . $list );
     }
     
-    ::Write( $hash, $endpoint, undef )
+    Write( $hash, $endpoint, undef )
         if ( !::IsDisabled($name) );
         
     return;
@@ -486,7 +488,7 @@ sub Get($@) {
         return 'Unknown argument ' . $cmd . ', choose one of ' . $list;
     }
     
-    return ::Write( $hash, $endpoint, undef )
+    return Write( $hash, $endpoint, undef )
 }
 
 sub GetCheckBridgeAlive($) {
@@ -500,7 +502,7 @@ sub GetCheckBridgeAlive($) {
     if ( !::IsDisabled($name)
       && $hash->{helper}->{iowrite} == 0 )
     {
-        ::Write( $hash, 'info', undef);
+        Write( $hash, 'info', undef);
 
         ::Log3( $name, 4, "NUKIBridge ($name) - run Write" );
     }
@@ -518,7 +520,7 @@ sub FirstRun($) {
     my $name = $hash->{NAME};
 
     ::RemoveInternalTimer($hash);
-    ::Write( $hash, 'list', undef )
+    Write( $hash, 'list', undef )
       if ( !::IsDisabled($name) );
       
     return ::InternalTimer( gettimeofday() + 5,
@@ -658,7 +660,7 @@ sub Distribution($$$) {
 
     my $dhash = $hash;
 
-    $dhash = $modules{NUKIDevice}{defptr}{ $param->{'nukiId'} }
+    $dhash = $::modules{NUKIDevice}{defptr}{ $param->{'nukiId'} }
       if ( defined( $param->{'nukiId'} ) );
 
     my $dname = $dhash->{NAME};

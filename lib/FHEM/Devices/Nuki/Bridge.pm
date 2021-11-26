@@ -547,7 +547,8 @@ sub CreateUri {
     {
         $uri .= '&action=' . $lockActionsSmartLock{$param}
           if ( $endpoint ne 'callback/add'
-            && $deviceType == 0 );
+            && ( $deviceType == 0
+              || deviceType == 4 ) );
 
         $uri .= '&action=' . $lockActionsOpener{$param}
           if ( $endpoint ne 'callback/add'

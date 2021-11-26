@@ -2,7 +2,7 @@
 #
 # Developed with Kate
 #
-#  (c) 2016-2020 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
+#  (c) 2016-2021 Copyright: Marko Oldenburg (hemdevelopment at cooltux dot net)
 #  All rights reserved
 #
 #  This script is free software; you can redistribute it and/or modify
@@ -148,7 +148,8 @@ GP_Export(
 
 my %deviceTypes = (
     0 => 'smartlock',
-    2 => 'opener'
+    2 => 'opener',
+    4 => 'smartlockNG'
 );
 
 my %modes = (
@@ -165,47 +166,58 @@ my %modes = (
 my %lockStates = (
     0 => {
         0 => 'uncalibrated',
-        2 => 'untrained'
+        2 => 'untrained',
+        4 => 'uncalibrated'
     },
     1 => {
         0 => 'locked',
-        2 => 'online'
+        2 => 'online',
+        4 => 'locked'
     },
     2 => {
         0 => 'unlocking',
-        2 => '-'
+        2 => '-',
+        4 => 'unlocking'
     },
     3 => {
         0 => 'unlocked',
-        2 => 'rto active'
+        2 => 'rto active',
+        4 => 'unlocked'
     },
     4 => {
         0 => 'locking',
-        2 => '-'
+        2 => '-',
+        4 => 'locking'
     },
     5 => {
         0 => 'unlatched',
-        2 => 'open'
+        2 => 'open',
+        4 => 'unlatched'
     },
     6 => {
         0 => 'unlocked (lock ‘n’ go)',
-        2 => '-'
+        2 => '-',
+        4 => 'unlocked (lock ‘n’ go)'
     },
     7 => {
         0 => 'unlatching',
-        2 => 'opening'
+        2 => 'opening',
+        4 => 'unlatching'
     },
     253 => {
         0 => '-',
-        2 => 'boot run'
+        2 => 'boot run',
+        4 => '-'
     },
     254 => {
         0 => 'motor blocked',
-        2 => '-'
+        2 => '-',
+        4 => 'motor blocked'
     },
     255 => {
         0 => 'undefined',
-        2 => 'undefined'
+        2 => 'undefined',
+        4 => 'undefined'
     }
 );
 
@@ -411,7 +423,8 @@ sub Set($$@) {
         my $list = '';
         $list =
 'statusRequest:noArg unlock:noArg lock:noArg unlatch:noArg locknGo:noArg locknGoWithUnlatch:noArg unpair:noArg'
-          if ( $hash->{DEVICETYPE} == 0 );
+          if ( $hash->{DEVICETYPE} == 0
+            || $hash->{DEVICETYPE} == 4 );
         $list =
 'statusRequest:noArg activateRto:noArg deactivateRto:noArg electricStrikeActuation:noArg activateContinuousMode:noArg deactivateContinuousMode:noArg unpair:noArg'
           if ( $hash->{DEVICETYPE} == 2 );
@@ -744,7 +757,7 @@ sub WriteReadings($$) {
   ],
   "release_status": "stable",
   "license": "GPL_2",
-  "version": "v1.9.11",
+  "version": "v1.9.20",
   "author": [
     "Marko Oldenburg <leongaultier@gmail.com>"
   ],

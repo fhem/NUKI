@@ -2,7 +2,7 @@
 #
 # Developed with Kate
 #
-#  (c) 2016-2020 Copyright: Marko Oldenburg (leongaultier at gmail dot com)
+#  (c) 2016-2020 Copyright: Marko Oldenburg (hemdevelopment at cooltux dot net)
 #  All rights reserved
 #
 #  This script is free software; you can redistribute it and/or modify
@@ -608,7 +608,8 @@ sub CreateUri($$) {
     {
         $uri .= '&action=' . $lockActionsSmartLock{$param}
           if (  $endpoint ne 'callback/add'
-            and $deviceType == 0 );
+            and ($deviceType == 0
+              || $deviceType == 4) );
 
         $uri .= '&action=' . $lockActionsOpener{$param}
           if (  $endpoint ne 'callback/add'
@@ -1354,7 +1355,7 @@ sub ParseJSON($$) {
   ],
   "release_status": "stable",
   "license": "GPL_2",
-  "version": "v1.9.16",
+  "version": "v1.9.20",
   "x_apiversion": "1.9",
   "author": [
     "Marko Oldenburg <leongaultier@gmail.com>"

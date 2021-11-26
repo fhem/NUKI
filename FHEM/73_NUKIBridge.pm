@@ -43,14 +43,13 @@ use warnings;
 use FHEM::Meta;
 require FHEM::Devices::Nuki::Bridge;
 
-
 sub ::NUKIBridge_Initialize { goto &Initialize }
 
 sub Initialize {
     my ($hash) = @_;
 
     # Provider
-    $hash->{WriteFn}   = \&Write;
+    $hash->{WriteFn}   = \&FHEM::Devices::Nuki::Bridge::Write;
     $hash->{Clients}   = ':NUKIDevice:';
     $hash->{MatchList} = { '1:NUKIDevice' => '^{.*}$' };
 
@@ -73,9 +72,6 @@ sub Initialize {
 
     return FHEM::Meta::InitMod( __FILE__, $hash );
 }
-
-
-
 
 1;
 
@@ -245,8 +241,8 @@ sub Initialize {
   ],
   "release_status": "stable",
   "license": "GPL_2",
-  "version": "v1.9.30",
-  "x_apiversion": "1.9",
+  "version": "v2.0.0",
+  "x_apiversion": "1.12.3",
   "author": [
     "Marko Oldenburg <leongaultier@gmail.com>"
   ],

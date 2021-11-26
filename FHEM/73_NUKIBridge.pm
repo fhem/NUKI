@@ -44,6 +44,37 @@ use FHEM::Meta;
 require FHEM::Devices::Nuki::Bridge;
 
 
+sub ::NUKIBridge_Initialize { goto &Initialize }
+
+sub Initialize {
+    my ($hash) = @_;
+
+    # Provider
+    $hash->{WriteFn}   = \&Write;
+    $hash->{Clients}   = ':NUKIDevice:';
+    $hash->{MatchList} = { '1:NUKIDevice' => '^{.*}$' };
+
+    my $webhookFWinstance =
+      join( ",", ::devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
+
+    # Consumer
+    $hash->{SetFn}    = \&FHEM::Devices::Nuki::Bridge::Set;
+    $hash->{GetFn}    = \&FHEM::Devices::Nuki::Bridge::Get;
+    $hash->{DefFn}    = \&FHEM::Devices::Nuki::Bridge::Define;
+    $hash->{UndefFn}  = \&FHEM::Devices::Nuki::Bridge::Undef;
+    $hash->{NotifyFn} = \&FHEM::Devices::Nuki::Bridge::Notify;
+    $hash->{AttrFn}   = \&FHEM::Devices::Nuki::Bridge::Attr;
+    $hash->{AttrList} =
+        'disable:1 '
+      . 'webhookFWinstance:'
+      . $webhookFWinstance . ' '
+      . 'webhookHttpHostname '
+      . $::readingFnAttributes;
+
+    return FHEM::Meta::InitMod( __FILE__, $hash );
+}
+
+
 1;
 
 =pod

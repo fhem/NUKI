@@ -35,7 +35,7 @@
 #
 
 ################################
-FHEM::Devices::Nuki::Bridge;
+package FHEM::Devices::Nuki::Bridge;
 
 use strict;
 use warnings;
@@ -117,8 +117,6 @@ if ($@) {
 
 ######## Begin Bridge
 
-sub ::NUKIBridge_Initialize { goto &Initialize }
-
 my %bridgeType = (
     '1' => 'Hardware',
     '2' => 'Software'
@@ -140,35 +138,7 @@ my %lockActionsOpener = (
     'deactivateContinuousMode' => 5
 );
 
-sub Initialize($) {
-    my ($hash) = @_;
-
-    # Provider
-    $hash->{WriteFn}   = \&Write;
-    $hash->{Clients}   = ':NUKIDevice:';
-    $hash->{MatchList} = { '1:NUKIDevice' => '^{.*}$' };
-
-    my $webhookFWinstance =
-      join( ",", ::devspec2array('TYPE=FHEMWEB:FILTER=TEMPORARY!=1') );
-
-    # Consumer
-    $hash->{SetFn}    = \&Set;
-    $hash->{GetFn}    = \&Get;
-    $hash->{DefFn}    = \&Define;
-    $hash->{UndefFn}  = \&Undef;
-    $hash->{NotifyFn} = \&Notify;
-    $hash->{AttrFn}   = \&Attr;
-    $hash->{AttrList} =
-        'disable:1 '
-      . 'webhookFWinstance:'
-      . $webhookFWinstance . ' '
-      . 'webhookHttpHostname '
-      . $::readingFnAttributes;
-
-    return FHEM::Meta::InitMod( __FILE__, $hash );
-}
-
-sub Define($$) {
+sub Define {
     my ( $hash, $def ) = @_;
 
     my @a = split( "[ \t][ \t]*", $def );
@@ -216,7 +186,7 @@ sub Define($$) {
     return;
 }
 
-sub Undef($$) {
+sub Undef {
     my ( $hash, $arg ) = @_;
 
     my $host = $hash->{HOST};
@@ -232,7 +202,7 @@ sub Undef($$) {
     return;
 }
 
-sub Attr(@) {
+sub Attr {
     my ( $cmd, $name, $attrName, $attrVal ) = @_;
 
     my $hash = $::defs{$name};
@@ -342,7 +312,7 @@ sub Attr(@) {
     return;
 }
 
-sub Notify($$) {
+sub Notify {
 
     my ( $hash, $dev ) = @_;
     my $name = $hash->{NAME};
@@ -372,7 +342,7 @@ sub Notify($$) {
     return;
 }
 
-sub addExtension($$$) {
+sub addExtension {
     my ( $name, $func, $link ) = @_;
 
     my $url = '/' . $link;
@@ -388,7 +358,7 @@ sub addExtension($$$) {
     return 1;
 }
 
-sub removeExtension($) {
+sub removeExtension {
     my ($link) = @_;
 
     my $url  = '/' . $link;
@@ -402,7 +372,7 @@ sub removeExtension($) {
     return;
 }
 
-sub Set($@) {
+sub Set {
     my ( $hash, $name, $cmd, @args ) = @_;
 
     my ( $arg, @params ) = @args;
@@ -463,7 +433,7 @@ sub Set($@) {
     return;
 }
 
-sub Get($@) {
+sub Get {
     my ( $hash, $name, $cmd, @args ) = @_;
 
     my ( $arg, @params ) = @args;
@@ -491,7 +461,7 @@ sub Get($@) {
     return Write( $hash, $endpoint, undef )
 }
 
-sub GetCheckBridgeAlive($) {
+sub GetCheckBridgeAlive {
     my ($hash) = @_;
 
     my $name = $hash->{NAME};
@@ -510,11 +480,11 @@ sub GetCheckBridgeAlive($) {
     ::Log3( $name, 4,
         "NUKIBridge ($name) - Call InternalTimer for GetCheckBridgeAlive" );
     
-    return ::InternalTimer( gettimeofday() + 30,
+    return ::InternalTimer( ::gettimeofday() + 30,
         \&FHEM::Devices::Nuki::Bridge::GetCheckBridgeAlive, $hash );
 }
 
-sub FirstRun($) {
+sub FirstRun {
     my ($hash) = @_;
 
     my $name = $hash->{NAME};
@@ -523,11 +493,11 @@ sub FirstRun($) {
     Write( $hash, 'list', undef )
       if ( !::IsDisabled($name) );
       
-    return ::InternalTimer( gettimeofday() + 5,
+    return ::InternalTimer( ::gettimeofday() + 5,
         \&FHEM::Devices::Nuki::Bridge::GetCheckBridgeAlive, $hash );
 }
 
-sub Write($@) {
+sub Write {
     my ( $hash, $endpoint, $json ) = @_;
     
     my $decode_json = eval { decode_json($json) }
@@ -556,7 +526,7 @@ sub Write($@) {
     return BridgeCall($hash);
 }
 
-sub CreateUri($$) {
+sub CreateUri {
     my ( $hash, $obj ) = @_;
 
     my $name       = $hash->{NAME};
@@ -602,7 +572,7 @@ sub CreateUri($$) {
     return $uri;
 }
 
-sub BridgeCall($) {
+sub BridgeCall {
     my $hash = shift;
 
     my $name     = $hash->{NAME};
@@ -650,7 +620,7 @@ sub BridgeCall($) {
     return;
 }
 
-sub Distribution($$$) {
+sub Distribution {
     my ( $param, $err, $json ) = @_;
 
     my $hash      = $param->{hash};
@@ -720,7 +690,7 @@ sub Distribution($$$) {
                     $hash->{helper}->{lastDeviceAction}
                 );
 
-                ::InternalTimer( gettimeofday() + 1,
+                ::InternalTimer( ::gettimeofday() + 1,
                     \&FHEM::Devices::Nuki::Bridge::BridgeCall, $hash );
             }
 
@@ -806,14 +776,14 @@ sub Distribution($$$) {
         ::Dispatch( $hash, $json, undef );
     }
 
-    ::InternalTimer( gettimeofday() + 3, \&FHEM::Devices::Nuki::Bridge::BridgeCall, $hash )
+    ::InternalTimer( ::gettimeofday() + 3, \&FHEM::Devices::Nuki::Bridge::BridgeCall, $hash )
       if ( defined( $hash->{helper}->{actionQueue} )
         && scalar( @{ $hash->{helper}->{actionQueue} } ) > 0 );
 
     return;
 }
 
-sub ResponseProcessing($$$) {
+sub ResponseProcessing {
     my ( $hash, $json, $endpoint ) = @_;
 
     my $name = $hash->{NAME};
@@ -962,7 +932,7 @@ matching NukiId at device $name"
     ::return ( 'text/plain; charset=utf-8', 'Call failure: ' . $request );
 }
 
-sub WriteReadings($$) {
+sub WriteReadings {
     my ( $hash, $decode_json ) = @_;
 
     my $name = $hash->{NAME};
@@ -993,7 +963,7 @@ sub WriteReadings($$) {
     return;
 }
 
-sub getLogfile($$) {
+sub getLogfile {
     my ( $param, $json ) = @_;
 
     my $hash = $param->{hash};
@@ -1063,7 +1033,7 @@ sub getLogfile($$) {
     return;
 }
 
-sub getCallbackList($$) {
+sub getCallbackList {
     my ( $param, $json ) = @_;
 
     my $hash = $param->{hash};
@@ -1134,7 +1104,7 @@ sub getCallbackList($$) {
     return;
 }
 
-sub getCallbackList2($$) {
+sub getCallbackList2 {
     my ( $param, $json ) = @_;
 
     my $hash = $param->{hash};
@@ -1206,7 +1176,7 @@ sub getCallbackList2($$) {
     return;
 }
 
-sub ParseJSON($$) {
+sub ParseJSON {
     my ( $hash, $buffer ) = @_;
 
     my $name  = $hash->{NAME};
@@ -1256,9 +1226,6 @@ sub ParseJSON($$) {
 
     return ( $msg, $tail );
 }
-
-
-
 
 
 

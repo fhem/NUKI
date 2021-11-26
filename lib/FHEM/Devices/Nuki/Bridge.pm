@@ -959,6 +959,8 @@ sub WriteReadings {
     ::readingsBulkUpdate( $hash, 'currentGMTime', $decode_json->{currentTime} );
     ::readingsBulkUpdate( $hash, 'serverConnected',
         $decode_json->{serverConnected} );
+    ::readingsBulkUpdate( $hash, 'wlanConnected',
+        $decode_json->{wlanConnected} );
     ::readingsEndUpdate( $hash, 1 );
     
     return;

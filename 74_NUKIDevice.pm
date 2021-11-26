@@ -2,7 +2,7 @@
 #
 # Developed with Kate
 #
-#  (c) 2016-2021 Copyright: Marko Oldenburg (hemdevelopment at cooltux dot net)
+#  (c) 2016-2021 Copyright: Marko Oldenburg (fhemdevelopment at cooltux dot net)
 #  All rights reserved
 #
 #  This script is free software; you can redistribute it and/or modify
@@ -434,8 +434,11 @@ sub Set($$@) {
 
     $hash->{helper}{lockAction} = $lockAction;
 
-    IOWrite( $hash, 'lockAction', $lockAction, $hash->{NUKIID},
-        $hash->{DEVICETYPE} );
+#     IOWrite( $hash, 'lockAction', $lockAction, $hash->{NUKIID},
+#         $hash->{DEVICETYPE} );
+        
+    IOWrite( $hash, 'lockAction', '{"param":"' . $lockAction
+        . '","nukiId":' . $hash->{NUKIID} . ',"deviceType":' . $hash->{DEVICETYPE} . '}' );
 
     return undef;
 }
@@ -446,8 +449,12 @@ sub GetUpdate($) {
     my $name = $hash->{NAME};
 
     if ( !IsDisabled($name) ) {
-        IOWrite( $hash, 'lockState', undef, $hash->{NUKIID},
-            $hash->{DEVICETYPE} );
+#         IOWrite( $hash, 'lockState', undef, $hash->{NUKIID},
+#             $hash->{DEVICETYPE} );
+            
+        IOWrite( $hash, 'lockState', '{"nukiId":' . $hash->{NUKIID}
+            . ',"deviceType":' . $hash->{DEVICETYPE} . '}' );
+
         Log3( $name, 2, "NUKIDevice ($name) - GetUpdate Call IOWrite" );
     }
 
@@ -510,7 +517,7 @@ sub Parse($$) {
         return $hash->{NAME};
     }
     else {
-        Log3( $name, 3,
+        Log3( $name, 4,
                 "NUKIDevice ($name) - autocreate new device "
               . makeDeviceName( $decode_json->{name} )
               . " with nukiId $decode_json->{nukiId}, model $decode_json->{deviceType}"
@@ -544,7 +551,10 @@ sub WriteReadings($$) {
           )
         {
             $state = $hash->{helper}{lockAction};
-            IOWrite( $hash, 'lockState', undef, $hash->{NUKIID} )
+#             IOWrite( $hash, 'lockState', undef, $hash->{NUKIID} )
+            
+            IOWrite( $hash, 'lockState', '{"nukiId":' . $hash->{NUKIID}
+                . ',"deviceType":' . $hash->{DEVICETYPE} . '}' )
               if (
                 ReadingsVal( $hash->{IODev}->{NAME}, 'bridgeType', 'Software' )
                 eq 'Software' );
@@ -558,8 +568,10 @@ sub WriteReadings($$) {
         {
 
             $state = $deviceTypes{ $hash->{DEVICETYPE} } . ' response error';
-            IOWrite( $hash, 'lockState', undef, $hash->{NUKIID},
-                $hash->{DEVICETYPE} );
+#             IOWrite( $hash, 'lockState', undef, $hash->{NUKIID},
+#                 $hash->{DEVICETYPE} );
+            IOWrite( $hash, 'lockState', '{"nukiId":' . $hash->{NUKIID}
+                . ',"deviceType":' . $hash->{DEVICETYPE} . '}' );
         }
 
         $decode_json->{'state'} = $state;
@@ -757,7 +769,7 @@ sub WriteReadings($$) {
   ],
   "release_status": "stable",
   "license": "GPL_2",
-  "version": "v1.9.20",
+  "version": "v1.9.50",
   "author": [
     "Marko Oldenburg <leongaultier@gmail.com>"
   ],

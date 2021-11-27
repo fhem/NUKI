@@ -219,7 +219,7 @@ sub Define {
     $iodev = $hash->{IODev}->{NAME};
 
     $hash->{BRIDGEAPI} = $::defs{$iodev}->{BRIDGEAPI}
-      if ( defined(iodev)
+      if ( defined($iodev)
         && $iodev );
 
     my $d = $::modules{NUKIDevice}{defptr}{$nukiId};
@@ -446,23 +446,25 @@ sub Parse {
         WriteReadings( $hash, $decode_json );
         ::Log3( $name, 4,
             "NUKIDevice ($name) - find logical device: $hash->{NAME}" );
+            
+        return $hash->{NAME};
 
         ##################
         ## Zwischenlösung so für die Umstellung, kann später gelöscht werden
-        if ( ::AttrVal( $name, 'model', '' ) eq '' ) {
-            ::CommandDefMod( undef,
-                    $name
-                  . ' NUKIDevice '
-                  . $hash->{NUKIID} . ' '
-                  . $decode_json->{deviceType} );
-            ::CommandAttr( undef,
-                    $name
-                  . ' model '
-                  . $deviceTypes{ $decode_json->{deviceType} } );
-            ::Log3( $name, 2, "NUKIDevice ($name) - redefined Defmod" );
-        }
+#         if ( ::AttrVal( $name, 'model', '' ) eq '' ) {
+#             ::CommandDefMod( undef,
+#                     $name
+#                   . ' NUKIDevice '
+#                   . $hash->{NUKIID} . ' '
+#                   . $decode_json->{deviceType} );
+#             ::CommandAttr( undef,
+#                     $name
+#                   . ' model '
+#                   . $deviceTypes{ $decode_json->{deviceType} } );
+#             ::Log3( $name, 2, "NUKIDevice ($name) - redefined Defmod" );
+#         }
 
-        return $hash->{NAME};
+        
     }
     else {
         ::Log3( $name, 4,

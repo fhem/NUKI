@@ -198,11 +198,11 @@ sub Define {
       ? $deviceType
       : 0;
 
-    $hash->{NUKIID}         = $nukiId;
-    $hash->{DEVICETYPEID}   = $deviceType;
-    $hash->{VERSION}        = version->parse($VERSION)->normal;
-    $hash->{STATE}          = 'Initialized';
-    $hash->{NOTIFYDEV}      = 'global,autocreate,' . $name;
+    $hash->{NUKIID}       = $nukiId;
+    $hash->{DEVICETYPEID} = $deviceType;
+    $hash->{VERSION}      = version->parse($VERSION)->normal;
+    $hash->{STATE}        = 'Initialized';
+    $hash->{NOTIFYDEV}    = 'global,autocreate,' . $name;
 
     my $iodev = ::AttrVal( $name, 'IODev', 'none' );
 
@@ -446,25 +446,24 @@ sub Parse {
         WriteReadings( $hash, $decode_json );
         ::Log3( $name, 4,
             "NUKIDevice ($name) - find logical device: $hash->{NAME}" );
-            
+
         return $hash->{NAME};
 
         ##################
         ## Zwischenlösung so für die Umstellung, kann später gelöscht werden
-#         if ( ::AttrVal( $name, 'model', '' ) eq '' ) {
-#             ::CommandDefMod( undef,
-#                     $name
-#                   . ' NUKIDevice '
-#                   . $hash->{NUKIID} . ' '
-#                   . $decode_json->{deviceType} );
-#             ::CommandAttr( undef,
-#                     $name
-#                   . ' model '
-#                   . $deviceTypes{ $decode_json->{deviceType} } );
-#             ::Log3( $name, 2, "NUKIDevice ($name) - redefined Defmod" );
-#         }
+      #         if ( ::AttrVal( $name, 'model', '' ) eq '' ) {
+      #             ::CommandDefMod( undef,
+      #                     $name
+      #                   . ' NUKIDevice '
+      #                   . $hash->{NUKIID} . ' '
+      #                   . $decode_json->{deviceType} );
+      #             ::CommandAttr( undef,
+      #                     $name
+      #                   . ' model '
+      #                   . $deviceTypes{ $decode_json->{deviceType} } );
+      #             ::Log3( $name, 2, "NUKIDevice ($name) - redefined Defmod" );
+      #         }
 
-        
     }
     else {
         ::Log3( $name, 4,
@@ -557,11 +556,18 @@ sub WriteReadings {
             && $t ne 'deviceType'
             && $t ne 'paired'
             && $t ne 'batteryCritical'
+            && $t ne 'batteryChargeState'
+            && $t ne 'batteryCharging'
             && $t ne 'timestamp' );
 
-        ::readingsBulkUpdate( $hash, $t,
-            ( $v =~ m/^[0-9]$/ ? $lockStates{$v}{ $hash->{DEVICETYPEID} } : $v ) )
-          if ( $t eq 'state' );
+        ::readingsBulkUpdate(
+            $hash, $t,
+            (
+                  $v =~ m/^[0-9]$/
+                ? $lockStates{$v}{ $hash->{DEVICETYPEID} }
+                : $v
+            )
+        ) if ( $t eq 'state' );
 
         ::readingsBulkUpdate( $hash, $t, $modes{$v}{ $hash->{DEVICETYPEID} } )
           if ( $t eq 'mode' );
@@ -571,10 +577,16 @@ sub WriteReadings {
 
         ::readingsBulkUpdate( $hash, $t, ( $v == 1 ? 'true' : 'false' ) )
           if ( $t eq 'paired' );
+          
+        ::readingsBulkUpdate( $hash, $t, ( $v == 1 ? 'true' : 'false' ) )
+          if ( $t eq 'batteryCharging' );
 
         ::readingsBulkUpdate( $hash, 'batteryState',
-            ( ( $v eq 'true' or $v == 1 ) ? 'low' : 'ok' ) )
+            ( $v == 1 ? 'low' : 'ok' ) )
           if ( $t eq 'batteryCritical' );
+
+        ::readingsBulkUpdate( $hash, 'batteryPercent', $v )
+          if ( $t eq 'batteryChargeState' );
     }
 
     ::readingsEndUpdate( $hash, 1 );

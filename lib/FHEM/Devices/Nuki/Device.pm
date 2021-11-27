@@ -111,6 +111,9 @@ my %deviceTypes = (
     4 => 'smartlock3'
 );
 
+my %deviceTypeIds = reverse(%deviceTypes);
+
+
 my %modes = (
     2 => {
         0 => 'door mode',
@@ -180,7 +183,14 @@ my %lockStates = (
     }
 );
 
-my %deviceTypeIds = reverse(%deviceTypes);
+my %doorsensorStates = (
+    1 => 'deactivated',
+    2 => 'door closed',
+    3 => 'door opened',
+    4 => 'door state unknown',
+    5 => 'calibrating'
+);
+
 
 sub Define {
     my $hash = shift;
@@ -204,6 +214,7 @@ sub Define {
     $hash->{VERSION}      = version->parse($VERSION)->normal;
     $hash->{STATE}        = 'Initialized';
     $hash->{NOTIFYDEV}    = 'global,autocreate,' . $name;
+
 
     my $iodev = ::AttrVal( $name, 'IODev', 'none' );
 
@@ -543,7 +554,10 @@ sub WriteReadings {
             && $t ne 'batteryCritical'
             && $t ne 'batteryChargeState'
             && $t ne 'batteryCharging'
-            && $t ne 'timestamp' );
+            && $t ne 'timestamp'
+            && $t ne 'doorsensorState'
+            && $t ne 'doorsensorStateName' );
+
 
         ::readingsBulkUpdate(
             $hash, $t,
@@ -559,6 +573,9 @@ sub WriteReadings {
 
         ::readingsBulkUpdate( $hash, $t, $deviceTypes{$v} )
           if ( $t eq 'deviceType' );
+          
+        ::readingsBulkUpdate( $hash, $t, $doorsensorStates{$v} )
+          if ( $t eq 'doorsensorState' );
 
         ::readingsBulkUpdate( $hash, $t, ( $v == 1 ? 'true' : 'false' ) )
           if ( $t eq 'paired' );

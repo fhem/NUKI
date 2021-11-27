@@ -501,7 +501,14 @@ sub GetCheckBridgeAlive {
     if ( !::IsDisabled($name)
         && $hash->{helper}->{iowrite} == 0 )
     {
-        Write( $hash, 'info', undef );
+        if ( $hash->{helper}->{runInfo} == 0 ) {
+            Write( $hash, 'info', undef );
+            $hash->{helper}->{runInfo} = 1;
+        }
+        else {
+            Write( $hash, 'list', undef );
+            $hash->{helper}->{runInfo} = 0;
+        }
 
         ::Log3( $name, 4, "NUKIBridge ($name) - run Write" );
     }
@@ -521,6 +528,7 @@ sub FirstRun {
     Write( $hash, 'list', undef )
       if ( !::IsDisabled($name) );
 
+    $hash->{helper}->{runInfo} = 0;
     return ::InternalTimer( ::gettimeofday() + 5,
         \&FHEM::Devices::Nuki::Bridge::GetCheckBridgeAlive, $hash );
 }

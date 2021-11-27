@@ -411,6 +411,8 @@ sub Set {
     my $arg  = shift // '';
 
     my $endpoint;
+    my $param;
+
 
     if ( lc($cmd) eq 'getdevicelist' ) {
         return 'usage: getDeviceList' if ($arg);
@@ -441,21 +443,25 @@ sub Set {
         return 'usage: callbackRemove' if ( split( m{\s+}xms, $arg ) > 1 );
 
         my $id = ( defined($arg) ? $arg : 0 );
+        $endpoint   = 'callback/remove';
+        $param      = '{"param":"' . $id . '"}';
+    }
+    elsif ( lc($cmd) eq 'configauth' ) {
+        return 'usage: configAuth' if ( split( m{\s+}xms, $arg ) > 1 );
 
-        Write( $hash, 'callback/remove', '{"param":"' . $id . '"}' )
-          if ( !::IsDisabled($name) );
-
-        return;
+        my $configAuth = 'enable=' . ($arg eq 'enable' ? 1 : 0);
+        $endpoint   = 'configAuth';
+        $param      = '{"param":"' . $configAuth . '"}';
     }
     else {
         my $list = '';
         $list .= 'info:noArg getDeviceList:noArg ';
-        $list .= 'clearLog:noArg fwUpdate:noArg reboot:noArg factoryReset:noArg'
+        $list .= 'clearLog:noArg fwUpdate:noArg reboot:noArg factoryReset:noArg configAuth:enable,disable'
           if ( ::ReadingsVal( $name, 'bridgeType', 'Software' ) eq 'Hardware' );
         return ( 'Unknown argument ' . $cmd . ', choose one of ' . $list );
     }
 
-    Write( $hash, $endpoint, undef )
+    Write( $hash, $endpoint, $param )
       if ( !::IsDisabled($name) );
 
     return;
@@ -596,6 +602,10 @@ sub CreateUri {
           if ( $endpoint ne 'callback/add'
             && $deviceType == 2 );
     }
+    
+    $uri .= '&' . $param
+      if ( defined($param)
+        && $endpoint eq 'configAuth' );
 
     $uri .= '&id=' . $param
       if ( defined($param)

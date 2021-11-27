@@ -145,28 +145,38 @@ sub Define {
     use version 0.60; our $VERSION = FHEM::Meta::Get( $hash, 'version' );
 
     my ( $name, undef, $host, $token ) = split( m{\s+}xms, $def );
-    return ('too few parameters: define <name> NUKIBridge <HOST> <TOKEN>')
-      if ( !defined($host)
-        || !defined($token) );
+#     return ('too few parameters: define <name> NUKIBridge <HOST> <TOKEN>')
+#       if ( !defined($host)
+#         || !defined($token) );
 
-    my $port  = 8080;
+    my $port  = ::AttrVal($name, 'port', 8080);
     my $infix = 'NUKIBridge';
-    $hash->{HOST}                  = $host;
+    $hash->{HOST}                  = $host // 'discover';
     $hash->{PORT}                  = $port;
-    $hash->{TOKEN}                 = $token;
+    $hash->{TOKEN}                 = $token // 'discover';
     $hash->{NOTIFYDEV}             = 'global,' . $name;
     $hash->{VERSION}               = version->parse($VERSION)->normal;
     $hash->{BRIDGEAPI}             = FHEM::Meta::Get( $hash, 'x_apiversion' );
     $hash->{helper}->{actionQueue} = [];
     $hash->{helper}->{iowrite}     = 0;
 
-    ::Log3( $name, 3,
-"NUKIBridge ($name) - defined with host $host on port $port, Token $token"
-    );
-
     ::CommandAttr( undef, $name . ' room NUKI' )
       if ( ::AttrVal( $name, 'room', 'none' ) eq 'none' );
 
+    $hash->{WEBHOOK_REGISTER} = "unregistered";
+
+    ::readingsSingleUpdate($hash, 'state', 'Initialized', 1);
+
+    ::RemoveInternalTimer($hash);
+
+    return BridgeDiscover($hash,'discover')
+      if ( $hash->{HOST} eq 'discover'
+        && $hash->{TOKEN} eq 'discover' );
+        
+    ::Log3( $name, 3,
+"NUKIBridge ($name) - defined with host $host on port $port, Token $token"
+    );
+    
     if (
         addExtension(
             $name,
@@ -177,13 +187,7 @@ sub Define {
     {
         $hash->{fhem}{infix} = $infix;
     }
-
-    $hash->{WEBHOOK_REGISTER} = "unregistered";
-
-    ::readingsSingleUpdate( $hash, 'state', 'Initialized', 1 );
-
-    ::RemoveInternalTimer($hash);
-
+    
     $::modules{NUKIBridge}{defptr}{ $hash->{HOST} } = $hash;
 
     return;
@@ -216,12 +220,23 @@ sub Attr {
 
     if ( $attrName eq 'disable' ) {
         if ( $cmd eq 'set' && $attrVal == 1 ) {
-            ::readingsSingleUpdate( $hash, 'state', 'disabled', 1 );
+            ::readingsSingleUpdate($hash, 'state', 'disabled', 1);
             ::Log3( $name, 3, "NUKIBridge ($name) - disabled" );
         }
         elsif ( $cmd eq 'del' ) {
-            ::readingsSingleUpdate( $hash, 'state', 'active', 1 );
+            ::readingsSingleUpdate($hash, 'state', 'active', 1);
             ::Log3( $name, 3, "NUKIBridge ($name) - enabled" );
+        }
+    }
+    
+    if ( $attrName eq 'port' ) {
+        if ( $cmd eq 'set' ) {
+            $hash->{PORT} = $attrVal;
+            ::Log3( $name, 3, "NUKIBridge ($name) - change bridge port" );
+        }
+        elsif ( $cmd eq 'del' ) {
+            $hash->{PORT} = 8080;
+            ::Log3( $name, 3, "NUKIBridge ($name) - set bridge port to default" );
         }
     }
 
@@ -229,10 +244,10 @@ sub Attr {
         if ( $cmd eq 'set' ) {
             ::Log3( $name, 3,
                 "NUKIBridge ($name) - enable disabledForIntervals" );
-            ::readingsSingleUpdate( $hash, 'state', 'Unknown', 1 );
+            ::readingsSingleUpdate($hash, 'state', 'Unknown', 1);
         }
         elsif ( $cmd eq 'del' ) {
-            ::readingsSingleUpdate( $hash, 'state', 'active', 1 );
+            ::readingsSingleUpdate($hash, 'state', 'active', 1);
             ::Log3( $name, 3,
                 "NUKIBridge ($name) - delete disabledForIntervals" );
         }
@@ -345,6 +360,8 @@ sub Notify {
             or grep /^DEFINED.$name$/,
             @{$events}
         )
+        && $hash->{HOST} ne 'discover'
+        && $hash->{TOKEN} ne 'discover'
         && $devname eq 'global'
         && $::init_done
       );
@@ -378,7 +395,10 @@ sub removeExtension {
 
     ::Log3( $name, 2,
         "NUKIBridge ($name) - Unregistering NUKIBridge for webhook URL $url..."
-    );
+    )
+      if ( defined($name) );
+    
+    
     delete $::data{FWEXT}{$url};
 
     return;
@@ -636,7 +656,7 @@ sub Distribution {
     my $json  = shift;
 
     my $hash      = $param->{hash};
-    my $doTrigger = $param->{doTrigger};
+#     my $doTrigger = $param->{doTrigger};
     my $name      = $hash->{NAME};
     my $host      = $hash->{HOST};
 
@@ -759,7 +779,7 @@ sub Distribution {
 
     ::readingsEndUpdate( $hash, 1 );
 
-    ::readingsSingleUpdate( $hash, 'state', 'connected', 1 );
+    ::readingsSingleUpdate($hash, 'state', 'connected', 1);
     ::Log3( $name, 5, "NUKIBridge ($name) - Bridge ist online" );
 
     if ( $param->{endpoint} eq 'callback/list' ) {
@@ -1250,5 +1270,145 @@ sub ParseJSON {
 
     return ( $msg, $tail );
 }
+
+sub BridgeDiscover {
+    my $hash        = shift;
+    my $endpoint    = shift;
+    my $bridge      = shift;
+    my $name        = $hash->{NAME};
+    my $url         = ( $endpoint eq 'discover' && !defined($bridge)
+            ? 'https://api.nuki.io/discover/bridges'
+            : 'http://' . $bridge->{'ip'} . ':' . $bridge->{'port'} . '/auth' );
+    my $timeout     = ( $endpoint eq 'discover' && !defined($bridge)
+            ? 5
+            : 35 );
+            
+    if ( $endpoint eq 'discover' ) {
+        ::Log3( $name, 3,
+    "NUKIBridge ($name) - Bridge device defined. run discover mode"
+        );
+
+        ::readingsSingleUpdate($hash, 'state', 'run discovery', 1);
+    }
+    elsif ( $endpoint eq 'getApiToken' ) {
+
+        ::Log3( $name, 3,
+    "NUKIBridge ($name) - Enables the api (if not yet enabled) and get the api token."
+        );
+    }
+
+
+    ::HttpUtils_NonblockingGet(
+            {
+                                url         => $url,
+                                timeout     => $timeout,
+                                hash        => $hash,
+                                header      => 'Accept: application/json',
+                                endpoint    => $endpoint,
+                                host        => $bridge->{'ip'},
+                                port        => $bridge->{'port'},
+                                method      => 'GET',
+                                callback    => \&BridgeDiscoverRequest,
+            }
+    );
+    
+    ::Log3( $name, 3,
+        "NUKIBridge ($name) - Send Discover request to Nuki Cloud" )
+          if ( $endpoint eq 'discover' );
+          
+    ::Log3( $name, 3,
+        "NUKIBridge ($name) - get API Token from the Bridge" )
+          if ( $endpoint eq 'getApiToken' );
+
+    return;
+}
+
+sub BridgeDiscoverRequest {
+    my $param   = shift;
+    my $err     = shift;
+    my $json    = shift;
+    
+    my $hash    = $param->{hash};
+    my $name    = $hash->{NAME};
+    
+    
+    if ( defined($err)
+      && $err ne '' )
+    {
+        return ::Log3( $name, 3,
+                    "NUKIBridge ($name) - Error: $err");
+    }
+    elsif ( exists( $param->{code})
+         && $param->{code} != 200 )
+    {
+        return ::Log3( $name, 3,
+                    "NUKIBridge ($name) - HTTP error Code present. Code: $param->{code}");
+    }
+
+    my $decode_json;
+    $decode_json = eval { decode_json($json) };
+    if ($@) {
+        ::Log3( $name, 3, "NUKIBridge ($name) - JSON error while request: $@" );
+        return;
+    }
+    
+    if ( $param->{endpoint} eq 'discover' ) {
+
+        return ::readingsSingleUpdate($hash, 'state', 'no bridges discovered', 1)
+          if ( scalar(@{$decode_json->{bridges}}) == 0
+            && $decode_json->{errorCode} == 0 );
+
+        return BridgeDiscover_getAPIToken($hash,$decode_json);
+    }
+    elsif ( $param->{endpoint} eq 'getApiToken' ) {
+        ::readingsSingleUpdate($hash, 'state', 'modefined bridge device in progress', 1);
+        
+        $decode_json->{host}    = $param->{host};
+        $decode_json->{port}    = $param->{port};
+        
+        return ModefinedBridgeDevices($hash,$decode_json)
+          if ( $decode_json->{success} == 1 );
+
+        return ::readingsSingleUpdate($hash, 'state', 'get api token failed', 1);
+    }
+    
+    return;
+}
+
+sub BridgeDiscover_getAPIToken {
+    my $hash        = shift;
+    my $decode_json = shift;
+    my $name        = $hash->{NAME};
+
+    my $pullApiKeyMessage   = 'When issuing this API-call the bridge turns on its LED for 30 seconds.
+The button of the bridge has to be pressed within this timeframe. Otherwise the bridge returns a negative success and no token.';
+
+    ::readingsSingleUpdate($hash, 'state', $pullApiKeyMessage, 1);
+    
+    for ( @{$decode_json->{bridges}} ) {
+        
+        BridgeDiscover($hash,'getApiToken',$_);
+    }
+    
+    return;
+}
+
+sub ModefinedBridgeDevices {
+    my $hash        = shift;
+    my $decode_json = shift;
+    my $name        = $hash->{NAME};
+
+
+    ::CommandAttr( undef, $name . ' port ' . $decode_json->{port} )
+      if ( $decode_json->{port} != 8080 );
+    ::CommandDefMod( undef,
+                    $name
+                  . ' NUKIBridge '
+                  . $decode_json->{host} . ' '
+                  . $decode_json->{token} );
+    
+    return;
+}
+
 
 1;

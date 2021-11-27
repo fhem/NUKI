@@ -50,7 +50,7 @@ sub Initialize($) {
 
     $hash->{AttrList} =
         'IODev '
-      . 'model:opener,smartlock '
+      . 'model:smartlock,opener,smartdoor,smartlock3 '
       . 'disable:1 '
       . $::readingFnAttributes;
 

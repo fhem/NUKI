@@ -107,7 +107,8 @@ if ($@) {
 my %deviceTypes = (
     0 => 'smartlock',
     2 => 'opener',
-    4 => 'smartlockNG'
+    3 => 'smartdoor',
+    4 => 'smartlock3'
 );
 
 my %modes = (
@@ -448,23 +449,6 @@ sub Parse {
             "NUKIDevice ($name) - find logical device: $hash->{NAME}" );
             
         return $hash->{NAME};
-
-        ##################
-        ## Zwischenlösung so für die Umstellung, kann später gelöscht werden
-#         if ( ::AttrVal( $name, 'model', '' ) eq '' ) {
-#             ::CommandDefMod( undef,
-#                     $name
-#                   . ' NUKIDevice '
-#                   . $hash->{NUKIID} . ' '
-#                   . $decode_json->{deviceType} );
-#             ::CommandAttr( undef,
-#                     $name
-#                   . ' model '
-#                   . $deviceTypes{ $decode_json->{deviceType} } );
-#             ::Log3( $name, 2, "NUKIDevice ($name) - redefined Defmod" );
-#         }
-
-        
     }
     else {
         ::Log3( $name, 4,

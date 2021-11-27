@@ -218,7 +218,9 @@ sub Define {
 
     $iodev = $hash->{IODev}->{NAME};
 
-    $hash->{BRIDGEAPI} = $::defs{$iodev}->{BRIDGEAPI};
+    $hash->{BRIDGEAPI} = $::defs{$iodev}->{BRIDGEAPI}
+      if ( defined(iodev)
+        && $iodev );
 
     my $d = $::modules{NUKIDevice}{defptr}{$nukiId};
 

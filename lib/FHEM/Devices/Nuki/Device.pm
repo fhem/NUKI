@@ -111,6 +111,9 @@ my %deviceTypes = (
     4 => 'smartlock3'
 );
 
+my %deviceTypeIds = reverse(%deviceTypes);
+
+
 my %modes = (
     2 => {
         0 => 'door mode',
@@ -180,7 +183,14 @@ my %lockStates = (
     }
 );
 
-my %deviceTypeIds = reverse(%deviceTypes);
+my %doorsensorStates = (
+    1 => 'deactivated',
+    2 => 'door closed',
+    3 => 'door opened',
+    4 => 'door state unknown',
+    5 => 'calibrating'
+);
+
 
 sub Define {
     my $hash = shift;
@@ -199,11 +209,12 @@ sub Define {
       ? $deviceType
       : 0;
 
-    $hash->{NUKIID}         = $nukiId;
-    $hash->{DEVICETYPEID}   = $deviceType;
-    $hash->{VERSION}        = version->parse($VERSION)->normal;
-    $hash->{STATE}          = 'Initialized';
-    $hash->{NOTIFYDEV}      = 'global,autocreate,' . $name;
+    $hash->{NUKIID}       = $nukiId;
+    $hash->{DEVICETYPEID} = $deviceType;
+    $hash->{VERSION}      = version->parse($VERSION)->normal;
+    $hash->{STATE}        = 'Initialized';
+    $hash->{NOTIFYDEV}    = 'global,autocreate,' . $name;
+
 
     my $iodev = ::AttrVal( $name, 'IODev', 'none' );
 
@@ -447,7 +458,7 @@ sub Parse {
         WriteReadings( $hash, $decode_json );
         ::Log3( $name, 4,
             "NUKIDevice ($name) - find logical device: $hash->{NAME}" );
-            
+
         return $hash->{NAME};
     }
     else {
@@ -541,24 +552,43 @@ sub WriteReadings {
             && $t ne 'deviceType'
             && $t ne 'paired'
             && $t ne 'batteryCritical'
-            && $t ne 'timestamp' );
+            && $t ne 'batteryChargeState'
+            && $t ne 'batteryCharging'
+            && $t ne 'timestamp'
+            && $t ne 'doorsensorState'
+            && $t ne 'doorsensorStateName' );
 
-        ::readingsBulkUpdate( $hash, $t,
-            ( $v =~ m/^[0-9]$/ ? $lockStates{$v}{ $hash->{DEVICETYPEID} } : $v ) )
-          if ( $t eq 'state' );
+
+        ::readingsBulkUpdate(
+            $hash, $t,
+            (
+                  $v =~ m/^[0-9]$/
+                ? $lockStates{$v}{ $hash->{DEVICETYPEID} }
+                : $v
+            )
+        ) if ( $t eq 'state' );
 
         ::readingsBulkUpdate( $hash, $t, $modes{$v}{ $hash->{DEVICETYPEID} } )
           if ( $t eq 'mode' );
 
         ::readingsBulkUpdate( $hash, $t, $deviceTypes{$v} )
           if ( $t eq 'deviceType' );
+          
+        ::readingsBulkUpdate( $hash, $t, $doorsensorStates{$v} )
+          if ( $t eq 'doorsensorState' );
 
         ::readingsBulkUpdate( $hash, $t, ( $v == 1 ? 'true' : 'false' ) )
           if ( $t eq 'paired' );
+          
+        ::readingsBulkUpdate( $hash, $t, ( $v == 1 ? 'true' : 'false' ) )
+          if ( $t eq 'batteryCharging' );
 
         ::readingsBulkUpdate( $hash, 'batteryState',
-            ( ( $v eq 'true' or $v == 1 ) ? 'low' : 'ok' ) )
+            ( $v == 1 ? 'low' : 'ok' ) )
           if ( $t eq 'batteryCritical' );
+
+        ::readingsBulkUpdate( $hash, 'batteryPercent', $v )
+          if ( $t eq 'batteryChargeState' );
     }
 
     ::readingsEndUpdate( $hash, 1 );

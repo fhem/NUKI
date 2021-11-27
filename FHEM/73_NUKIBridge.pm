@@ -64,8 +64,7 @@ sub Initialize {
     $hash->{NotifyFn} = \&FHEM::Devices::Nuki::Bridge::Notify;
     $hash->{AttrFn}   = \&FHEM::Devices::Nuki::Bridge::Attr;
     $hash->{AttrList} =
-        'disable:1 '
-      . 'port ' 
+        'disable:1 ' . 'port '
       . 'webhookFWinstance:'
       . $webhookFWinstance . ' '
       . 'webhookHttpHostname '

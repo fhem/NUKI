@@ -815,7 +815,7 @@ sub Distribution {
     else {
         my $decode_json = eval { decode_json($json) };
         if ($@) {
-            Log3( $name, 3,
+            ::Log3( $name, 3,
                 "NUKIBridge ($name) - JSON error while request: $@" );
             return;
         }

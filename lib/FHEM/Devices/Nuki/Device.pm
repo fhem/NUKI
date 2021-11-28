@@ -113,7 +113,6 @@ my %deviceTypes = (
 
 my %deviceTypeIds = reverse(%deviceTypes);
 
-
 my %modes = (
     2 => {
         0 => 'door mode',
@@ -191,7 +190,6 @@ my %doorsensorStates = (
     5 => 'calibrating'
 );
 
-
 sub Define {
     my $hash = shift;
     my $def  = shift // return;
@@ -214,7 +212,6 @@ sub Define {
     $hash->{VERSION}      = version->parse($VERSION)->normal;
     $hash->{STATE}        = 'Initialized';
     $hash->{NOTIFYDEV}    = 'global,autocreate,' . $name;
-
 
     my $iodev = ::AttrVal( $name, 'IODev', 'none' );
 
@@ -558,7 +555,6 @@ sub WriteReadings {
             && $t ne 'doorsensorState'
             && $t ne 'doorsensorStateName' );
 
-
         ::readingsBulkUpdate(
             $hash, $t,
             (
@@ -573,13 +569,13 @@ sub WriteReadings {
 
         ::readingsBulkUpdate( $hash, $t, $deviceTypes{$v} )
           if ( $t eq 'deviceType' );
-          
+
         ::readingsBulkUpdate( $hash, $t, $doorsensorStates{$v} )
           if ( $t eq 'doorsensorState' );
 
         ::readingsBulkUpdate( $hash, $t, ( $v == 1 ? 'true' : 'false' ) )
           if ( $t eq 'paired' );
-          
+
         ::readingsBulkUpdate( $hash, $t, ( $v == 1 ? 'true' : 'false' ) )
           if ( $t eq 'batteryCharging' );
 

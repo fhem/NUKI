@@ -146,10 +146,6 @@ sub Define {
 
     my ( $name, undef, $host, $token ) = split( m{\s+}xms, $def );
 
-    #     return ('too few parameters: define <name> NUKIBridge <HOST> <TOKEN>')
-    #       if ( !defined($host)
-    #         || !defined($token) );
-
     my $port  = ::AttrVal( $name, 'port', 8080 );
     my $infix = 'NUKIBridge';
     $hash->{HOST}                  = $host // 'discover';
@@ -411,6 +407,7 @@ sub Set {
     my $arg  = shift // '';
 
     my $endpoint;
+    my $param;
 
     if ( lc($cmd) eq 'getdevicelist' ) {
         return 'usage: getDeviceList' if ($arg);
@@ -441,21 +438,26 @@ sub Set {
         return 'usage: callbackRemove' if ( split( m{\s+}xms, $arg ) > 1 );
 
         my $id = ( defined($arg) ? $arg : 0 );
+        $endpoint = 'callback/remove';
+        $param    = '{"param":"' . $id . '"}';
+    }
+    elsif ( lc($cmd) eq 'configauth' ) {
+        return 'usage: configAuth' if ( split( m{\s+}xms, $arg ) > 1 );
 
-        Write( $hash, 'callback/remove', '{"param":"' . $id . '"}' )
-          if ( !::IsDisabled($name) );
-
-        return;
+        my $configAuth = 'enable=' . ( $arg eq 'enable' ? 1 : 0 );
+        $endpoint = 'configAuth';
+        $param    = '{"param":"' . $configAuth . '"}';
     }
     else {
         my $list = '';
         $list .= 'info:noArg getDeviceList:noArg ';
-        $list .= 'clearLog:noArg fwUpdate:noArg reboot:noArg factoryReset:noArg'
+        $list .=
+'clearLog:noArg fwUpdate:noArg reboot:noArg factoryReset:noArg configAuth:enable,disable'
           if ( ::ReadingsVal( $name, 'bridgeType', 'Software' ) eq 'Hardware' );
         return ( 'Unknown argument ' . $cmd . ', choose one of ' . $list );
     }
 
-    Write( $hash, $endpoint, undef )
+    Write( $hash, $endpoint, $param )
       if ( !::IsDisabled($name) );
 
     return;
@@ -529,6 +531,9 @@ sub FirstRun {
       if ( !::IsDisabled($name) );
 
     $hash->{helper}->{runInfo} = 0;
+    ::readingsSingleUpdate( $hash, 'configAuthSuccess', 'unknown', 0 )
+      if ( ::ReadingsVal( $name, 'configAuthSuccess', 'none' ) eq 'none' );
+
     return ::InternalTimer( ::gettimeofday() + 5,
         \&FHEM::Devices::Nuki::Bridge::GetCheckBridgeAlive, $hash );
 }
@@ -596,6 +601,10 @@ sub CreateUri {
           if ( $endpoint ne 'callback/add'
             && $deviceType == 2 );
     }
+
+    $uri .= '&' . $param
+      if ( defined($param)
+        && $endpoint eq 'configAuth' );
 
     $uri .= '&id=' . $param
       if ( defined($param)
@@ -906,10 +915,13 @@ sub ResponseProcessing {
             }
         }
 
-        WriteReadings( $hash, $decode_json )
+        WriteReadings( $hash, $decode_json, $endpoint )
           if ( $endpoint eq 'info' );
 
         return;
+    }
+    elsif ( $endpoint eq 'configAuth' ) {
+        WriteReadings( $hash, $decode_json, $endpoint );
     }
     else {
 
@@ -979,6 +991,7 @@ sub CGI() {
 sub WriteReadings {
     my $hash        = shift;
     my $decode_json = shift;
+    my $endpoint    = shift;
 
     my $name = $hash->{NAME};
 
@@ -989,25 +1002,34 @@ sub WriteReadings {
     my $dhash;
 
     ::readingsBeginUpdate($hash);
-    ::readingsBulkUpdate( $hash, 'appVersion',
-        $decode_json->{versions}->{appVersion} );
-    ::readingsBulkUpdate( $hash, 'firmwareVersion',
-        $decode_json->{versions}->{firmwareVersion} );
-    ::readingsBulkUpdate( $hash, 'wifiFirmwareVersion',
-        $decode_json->{versions}->{wifiFirmwareVersion} );
-    ::readingsBulkUpdate( $hash, 'bridgeType',
-        $bridgeType{ $decode_json->{bridgeType} } );
-    ::readingsBulkUpdate( $hash, 'hardwareId',
-        $decode_json->{ids}{hardwareId} );
-    ::readingsBulkUpdate( $hash, 'serverId', $decode_json->{ids}{serverId} );
-    ::readingsBulkUpdate( $hash, 'uptime',   $decode_json->{uptime} );
-    ::readingsBulkUpdate( $hash, 'currentGMTime', $decode_json->{currentTime} );
-    ::readingsBulkUpdate( $hash, 'serverConnected',
-        $decode_json->{serverConnected} );
-    ::readingsBulkUpdate( $hash, 'wlanConnected',
-        $decode_json->{wlanConnected} );
-    ::readingsEndUpdate( $hash, 1 );
 
+    if ( $endpoint eq 'configAuth' ) {
+        ::readingsBulkUpdate( $hash, 'configAuthSuccess',
+            $decode_json->{success} );
+    }
+    else {
+        ::readingsBulkUpdate( $hash, 'appVersion',
+            $decode_json->{versions}->{appVersion} );
+        ::readingsBulkUpdate( $hash, 'firmwareVersion',
+            $decode_json->{versions}->{firmwareVersion} );
+        ::readingsBulkUpdate( $hash, 'wifiFirmwareVersion',
+            $decode_json->{versions}->{wifiFirmwareVersion} );
+        ::readingsBulkUpdate( $hash, 'bridgeType',
+            $bridgeType{ $decode_json->{bridgeType} } );
+        ::readingsBulkUpdate( $hash, 'hardwareId',
+            $decode_json->{ids}{hardwareId} );
+        ::readingsBulkUpdate( $hash, 'serverId',
+            $decode_json->{ids}{serverId} );
+        ::readingsBulkUpdate( $hash, 'uptime', $decode_json->{uptime} );
+        ::readingsBulkUpdate( $hash, 'currentGMTime',
+            $decode_json->{currentTime} );
+        ::readingsBulkUpdate( $hash, 'serverConnected',
+            $decode_json->{serverConnected} );
+        ::readingsBulkUpdate( $hash, 'wlanConnected',
+            $decode_json->{wlanConnected} );
+    }
+
+    ::readingsEndUpdate( $hash, 1 );
     return;
 }
 

@@ -4,25 +4,13 @@ use File::Basename;
 use POSIX qw(strftime);
 use strict;
 
-my @filenames = (   'FHEM/73_AutoShuttersControl.pm',
-                    'lib/FHEM/Automation/ShuttersControl.pm',
-                    'lib/FHEM/Automation/ShuttersControl/Dev.pm',
-                    'lib/FHEM/Automation/ShuttersControl/Roommate.pm',
-                    'lib/FHEM/Automation/ShuttersControl/Shutters.pm',
-		    'lib/FHEM/Automation/ShuttersControl/Shading.pm',
-		    'lib/FHEM/Automation/ShuttersControl/EventProcessingFunctions.pm',
-                    'lib/FHEM/Automation/ShuttersControl/Helper.pm',
-                    'lib/FHEM/Automation/ShuttersControl/Window.pm',
-                    'lib/FHEM/Automation/ShuttersControl/Dev/Attr.pm',
-                    'lib/FHEM/Automation/ShuttersControl/Dev/Readings.pm',
-                    'lib/FHEM/Automation/ShuttersControl/Shutters/Attr.pm',
-                    'lib/FHEM/Automation/ShuttersControl/Shutters/Readings.pm',
-                    'lib/FHEM/Automation/ShuttersControl/Window/Attr.pm',
-                    'lib/FHEM/Automation/ShuttersControl/Window/Readings.pm',
-		    'lib/FHEM/Automation/ShuttersControl/Rainprotection.pm'
+my @filenames = (   'FHEM/73_NUKIBridge.pm',
+		    'FHEM/74_NUKIDevice.pm',
+		    'lib/FHEM/Devices/Nuki/Bridge.pm',
+		    'lib/FHEM/Devices/Nuki/Device.pm'
     );
 
-my $controlsfile    = 'controls_AutoShuttersControl.txt';
+my $controlsfile    = 'controls_NukiSmart.txt';
 
 open(FH, ">$controlsfile") || return("Can't open $controlsfile: $!");
 

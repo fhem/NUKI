@@ -1,6 +1,6 @@
 ###############################################################################
 #
-# Developed with Kate
+# Developed with VSCodium
 #
 #  (c) 2016-2021 Copyright: Marko Oldenburg (fhemdevelopment at cooltux dot net)
 #  All rights reserved
@@ -32,11 +32,19 @@ use warnings;
 use FHEM::Meta;
 require FHEM::Devices::Nuki::Device;
 
+use GPUtils qw(GP_Import);
+
+BEGIN {
+
+    # Import from main context
+    GP_Import(qw( readingFnAttributes ));
+}
+
 main::LoadModule('NUKIBridge');
 
 sub ::NUKIDevice_Initialize { goto &Initialize }
 
-sub Initialize($) {
+sub Initialize {
     my ($hash) = @_;
 
     $hash->{Match} = '^{.*}$';
@@ -52,7 +60,7 @@ sub Initialize($) {
         'IODev '
       . 'model:smartlock,opener,smartdoor,smartlock3 '
       . 'disable:1 '
-      . $::readingFnAttributes;
+      . $readingFnAttributes;
 
     return FHEM::Meta::InitMod( __FILE__, $hash );
 }

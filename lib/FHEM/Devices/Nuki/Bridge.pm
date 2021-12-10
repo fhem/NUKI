@@ -1,6 +1,6 @@
 ###############################################################################
 #
-# Developed with Kate
+# Developed with VSCodium
 #
 #  (c) 2016-2021 Copyright: Marko Oldenburg (fhemdevelopment at cooltux dot net)
 #  All rights reserved
@@ -719,6 +719,8 @@ sub DistributionErrHandle2 {
     my $json  = shift;
     my $name  = $hash->{NAME};
 
+# 2021.12.10 13:55:43 1: PERL WARNING: Use of uninitialized value $json in string eq at lib/FHEM/Devices/Nuki/Bridge.pm line 722.
+# Can't use string ("{"success": false}") as a HASH ref while "strict refs" in use at lib/FHEM/Devices/Nuki/Bridge.pm line 722.
     if (   ( $json eq '' || $json =~ /Unavailable/i )
         && exists( $param->{code} )
         && $param->{code} != 200 )
@@ -835,7 +837,7 @@ sub Distribution {
     return $errHandle1
       if ($errHandle1);
 
-    $errHandle2 = DistributionErrHandle2( $hash, $param, $json );
+    $errHandle2 = DistributionErrHandle2( $hash, $err, $param, $json );
     return $errHandle2
       if ($errHandle2);
 

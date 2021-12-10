@@ -1,6 +1,6 @@
 ###############################################################################
 #
-# Developed with Kate
+# Developed with VSCodium
 #
 #  (c) 2016-2021 Copyright: Marko Oldenburg (fhemdevelopment at cooltux dot net)
 #  All rights reserved
@@ -43,6 +43,14 @@ use warnings;
 use FHEM::Meta;
 require FHEM::Devices::Nuki::Bridge;
 
+use GPUtils qw(GP_Import);
+
+BEGIN {
+
+    # Import from main context
+    GP_Import(qw( readingFnAttributes ));
+}
+
 sub ::NUKIBridge_Initialize { goto &Initialize }
 
 sub Initialize {
@@ -68,7 +76,7 @@ sub Initialize {
       . 'webhookFWinstance:'
       . $webhookFWinstance . ' '
       . 'webhookHttpHostname '
-      . $::readingFnAttributes;
+      . $readingFnAttributes;
 
     return FHEM::Meta::InitMod( __FILE__, $hash );
 }

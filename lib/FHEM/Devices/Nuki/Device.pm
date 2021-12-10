@@ -191,6 +191,7 @@ my %doorsensorStates = (
 sub Define {
     my $hash = shift;
     my $def  = shift // return;
+    my $version;
 
     return $@ unless ( FHEM::Meta::SetInternals($hash) );
 
@@ -455,8 +456,8 @@ sub Parse {
         return $dhash->{NAME};
     }
     else {
-        ::Log3( $dname, 4,
-                "NUKIDevice ($dname) - autocreate new device "
+        ::Log3( $name, 4,
+                "NUKIDevice ($name) - autocreate new device "
               . ::makeDeviceName( $decode_json->{name} )
               . " with nukiId $decode_json->{nukiId}, model $decode_json->{deviceType}"
         );
@@ -521,7 +522,7 @@ sub SmartlockState {
         delete $hash->{helper}{lockAction};
     }
 
-    return;
+    return $decode_json;
 }
 
 sub WriteReadings {
@@ -529,7 +530,7 @@ sub WriteReadings {
     my $decode_json = shift;
     my $name        = $hash->{NAME};
 
-    SmartlockState();
+    $decode_json = SmartlockState( $hash, $decode_json );
 
     ::readingsBeginUpdate($hash);
 

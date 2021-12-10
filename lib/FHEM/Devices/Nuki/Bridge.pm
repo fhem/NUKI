@@ -426,27 +426,27 @@ sub Set {
 
     given ($cmd) {
         when ('getdevicelist') {
-            return 'usage: getDeviceList' if ( defined($arg) );
+            return 'usage: getDeviceList' if ($arg);
             $endpoint = 'list';
         }
         when ('info') {
-            return 'usage: info' if ( defined($arg) );
+            return 'usage: info' if ($arg);
             $endpoint = 'info';
         }
         when ('fwupdate') {
-            return 'usage: fwUpdate' if ( defined($arg) );
+            return 'usage: fwUpdate' if ($arg);
             $endpoint = 'fwupdate';
         }
         when ('reboot') {
-            return 'usage: freboot' if ( defined($arg) );
+            return 'usage: freboot' if ($arg);
             $endpoint = 'reboot';
         }
         when ('clearlog') {
-            return 'usage: clearLog' if ( defined($arg) );
+            return 'usage: clearLog' if ($arg);
             $endpoint = 'clearlog';
         }
         when ('factoryreset') {
-            return 'usage: factoryReset' if ( defined($arg) );
+            return 'usage: factoryReset' if ($arg);
             $endpoint = 'factoryreset';
         }
 
@@ -1037,7 +1037,7 @@ sub CGI() {
         $hash->{WEBHOOK_LAST} = ::TimeNow();
 
         ::Log3( $name, 3,
-"NUKIBridge WEBHOOK ($name) - Received webhook for matching NukiId at device $name"
+"NUKIBridge WEBHOOK ($name) - Received webhook for matching NukiId at IODev $name"
         );
 
         ::Dispatch( $hash, $json, undef );

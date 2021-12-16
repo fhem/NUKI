@@ -77,7 +77,7 @@ sub Initialize {
 <a name="NUKIDevice"></a>
 <h3>NUKIDevice</h3>
 <ul>
-  <u><b>NUKIDevice - Controls the Nuki Smartlock</b></u>
+  <u><b>NUKIDevice - Controls Nuki Devices</b></u>
   <br>
   The Nuki module connects FHEM over the Nuki Bridge with a Nuki Smartlock or Nuki Opener. After that, it´s possible to control your Nuki devices<br>
   Normally the Nuki devices are automatically created by the bridge module.
@@ -112,7 +112,6 @@ sub Initialize {
         <li>paired - paired information false/true</li>
         <li>rssi - value of rssi</li>
         <li>state - Status of the Smartlock or error message if any error.</li>
-        <li>stateName - Status of the Smartlock or error message if any error.</li>
         <li>succes - true, false   Returns the status of the last closing command. Ok or not Ok.</li>
     </ul>
   <br>Opener
@@ -128,7 +127,6 @@ sub Initialize {
         <li>ringactionTimestamp - timestamp of ring</li>
         <li>rssi - value of rssi</li>
         <li>state - Status of the Smartlock or error message if any error.</li>
-        <li>stateName - Status of the Smartlock or error message if any error.</li>
         <li>succes - true, false   Returns the status of the last closing command. Ok or not Ok.</li>
     </ul>
     <br><br>
@@ -160,21 +158,21 @@ sub Initialize {
 <a name="NUKIDevice"></a>
 <h3>NUKIDevice</h3>
 <ul>
-  <u><b>NUKIDevice - Steuert das Nuki Smartlock</b></u>
+  <u><b>NUKIDevice - Zur Steuerung von Nuki Ger&auml;te</b></u>
   <br>
-  Das Nuki Modul verbindet FHEM über die Nuki Bridge  mit einem Nuki Smartlock oder Nuki Opener. Es ist dann m&ouml;glich das Schloss zu ver- und entriegeln.<br>
-  In der Regel werden die Nuki Devices automatisch durch das Bridgemodul angelegt.
+  Das Nuki Modul verbindet FHEM &uuml;ber die Nuki Bridge mit einem Nuki Smartlock oder Opener. Nach der Einrichtung k&ouml;nnen diese Ger&auml;te gesteuert werden.<br>
+  Die Nuki Ger&auml;te werden automatisch nach dem erstellen der Nuki Bridge in FHEM eingerichtet.
   <br><br>
   <a name="NUKIDevicedefine"></a>
   <b>Define</b>
   <ul><br>
     <code>define &lt;name&gt; NUKIDevice &lt;Nuki-Id&gt; &lt;IODev-Device&gt; &lt;Device-Type&gt;</code>
     <br><br>
-    Device-Type ist 0 f&uuml;r das Smartlock und 2 f&üuml;r den Opener.
+    Der Device-Type kann 0/4 f&uuml;r ein Smartlock sein oder 2 f&uuml;r den Opener.
     <br><br>
-    Beispiel:
+    Example:
     <ul><br>
-      <code>define Haust&uuml;r NUKIDevice 1 NBridge1 0</code><br>
+      <code>define Frontdoor NUKIDevice 1 NBridge1 0</code><br>
     </ul>
     <br>
     Diese Anweisung erstellt ein NUKIDevice mit Namen Haust&uuml;r, der NukiId 1 sowie dem IODev Device NBridge1.<br>
@@ -183,35 +181,55 @@ sub Initialize {
   <br><br>
   <a name="NUKIDevicereadings"></a>
   <b>Readings</b>
-  <ul>
-    <li>state - Status des Smartlock bzw. Fehlermeldung von Fehler vorhanden.</li>
-    <li>lockState - aktueller Schlie&szlig;status uncalibrated, locked, unlocked, unlocked (lock ‘n’ go), unlatched, locking, unlocking, unlatching, motor blocked, undefined.</li>
-    <li>name - Name des Smart Locks</li>
-    <li>paired - pairing Status des Smart Locks</li>
-    <li>rssi - rssi Wert des Smart Locks</li>
-    <li>succes - true, false Gibt des Status des letzten Schlie&szlig;befehles wieder. Geklappt oder nicht geklappt.</li>
-    <li>batteryCritical - Ist die Batterie in einem kritischen Zustand? true, false</li>
-    <li>batteryState - Status der Batterie, ok/low</li>
-  </ul>
-  <br><br>
-  <a name="NUKIDeviceset"></a>
-  <b>Set</b>
-  <ul>
-    <li>statusRequest - ruft den aktuellen Status des Smartlocks von der Bridge ab.</li>
-    <li>lock - verschlie&szlig;en</li>
-    <li>unlock - aufschlie&szlig;en</li>
-    <li>unlatch - entriegeln/Falle &ouml;ffnen.</li>
-    <li>unpair -  entfernt das pairing mit dem Smart Lock</li>
-    <li>locknGo - verschlie&szlig;en wenn gegangen</li>
-    <li>locknGoWithUnlatch - verschlie&szlig;en nach dem die Falle ge&ouml;ffnet wurde.</li>
-    <br>
-  </ul>
-  <br><br>
-  <a name="NUKIDeviceattribut"></a>
-  <b>Attribute</b>
-  <ul>
-    <li>disable - deaktiviert das Nuki Device</li>
-    <br>
+  <br>Smartlock
+    <ul>
+        <li>batteryCharging - wird die Batterie geladen true/false.</li>
+        <li>batteryPercent - aktueller Ladestand der Batterie.</li>
+        <li>batteryState - Staus der Batterie ok/low</li>
+        <li>deviceType - der Typenname des Nuki Ger&auml;tes smartlock/smartlock3/opener</li>
+        <li>firmwareVersion - Version der Ger&auml;te Firmware</li>
+        <li>name - Name des Nuki Ger&auml;tes</li>
+        <li>nukiid - die Ger&auml;te Id</li>
+        <li>paired - paired Informationen false/true</li>
+        <li>rssi - Wert f&uuml;r die empfangene Signalst&auml;rke</li>
+        <li>state - Status des Smartlock bzw . Fehlermeldung von Fehler vorhanden.</li>
+        <li>succes - true, false. Gibt den Status des letzen Befehls zur&uuml;ck.</li>
+    </ul>
+  <br>Opener
+    <ul>
+        <li>batteryState - battery state ok/low</li>
+        <li>deviceType - type name of nuki device smartlock/smartlock3/opener</li>
+        <li>firmwareVersion - version of device firmware</li>
+        <li>mode - Operation mode (door mode/continuous mode)</li>
+        <li>name - name of the device</li>
+        <li>nukiid - id of the nuki device</li>
+        <li>paired - paired information false/true</li>
+        <li>ringactionState - state of ring (0/1)</li>
+        <li>ringactionTimestamp - timestamp of ring</li>
+        <li>rssi - Wert f &uuml;r die empfangene Signalst &auml;rke</li>
+        <li>state - Status des Smartlock bzw . Fehlermeldung von Fehler vorhanden.</li>
+        <li>succes - true, false. Gibt den Status des letzen Befehls zur&uuml;ck.</li>
+    </ul>
+    <br><br>
+    <a name="NUKIDeviceset"></a>
+    <b>Set</b>
+    <ul>
+        <li>statusRequest - retrieves the current state of the smartlock from the bridge.</li>
+        <li>lock - lock</li>
+        <li>unlock - unlock</li>
+        <li>unlatch - unlock / open Door</li>
+        <li>unpair -  Removes the pairing with a given Smart Lock</li>
+        <li>locknGo - lock when gone</li>
+        <li>locknGoWithUnlatch - lock after the door has been opened</li>
+        <br>
+    </ul>
+    <br><br>
+    <a name="NUKIDeviceattribut"></a>
+    <b>Attributes</b>
+    <ul>
+        <li>disable - disables the Nuki device</li>
+        <br>
+    </ul>
   </ul>
 </ul>
 

@@ -1,6 +1,6 @@
 ###############################################################################
 #
-# Developed with VSCodium
+# Developed with VSCodium and richterger perl plugin
 #
 #  (c) 2016-2021 Copyright: Marko Oldenburg (fhemdevelopment at cooltux dot net)
 #  All rights reserved
@@ -267,8 +267,8 @@ sub Initialize {
   ],
   "release_status": "stable",
   "license": "GPL_2",
-  "version": "v2.0.0",
-  "x_apiversion": "1.12.3",
+  "version": "v2.0.1",
+  "x_apiversion": "1.13.0",
   "author": [
     "Marko Oldenburg <leongaultier@gmail.com>"
   ],

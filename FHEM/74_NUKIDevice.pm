@@ -1,6 +1,6 @@
 ###############################################################################
 #
-# Developed with VSCodium
+# Developed with VSCodium and richterger perl plugin
 #
 #  (c) 2016-2021 Copyright: Marko Oldenburg (fhemdevelopment at cooltux dot net)
 #  All rights reserved
@@ -79,7 +79,7 @@ sub Initialize {
 <ul>
   <u><b>NUKIDevice - Controls the Nuki Smartlock</b></u>
   <br>
-  The Nuki module connects FHEM over the Nuki Bridge with a Nuki Smartlock or Nuki Opener. After that, it´s possible to lock and unlock the Smartlock.<br>
+  The Nuki module connects FHEM over the Nuki Bridge with a Nuki Smartlock or Nuki Opener. After that, it´s possible to control your Nuki devices<br>
   Normally the Nuki devices are automatically created by the bridge module.
   <br><br>
   <a name="NUKIDevicedefine"></a>
@@ -87,7 +87,7 @@ sub Initialize {
   <ul><br>
     <code>define &lt;name&gt; NUKIDevice &lt;Nuki-Id&gt; &lt;IODev-Device&gt; &lt;Device-Type&gt;</code>
     <br><br>
-    Device-Type is 0 for the Smartlock and 2 for the Opener.
+    Device-Type is 0/4 for the Smartlock and 2 for the Opener.
     <br><br>
     Example:
     <ul><br>
@@ -100,35 +100,57 @@ sub Initialize {
   <br><br>
   <a name="NUKIDevicereadings"></a>
   <b>Readings</b>
-  <ul>
-    <li>state - Status of the Smartlock or error message if any error.</li>
-    <li>lockState - current lock status uncalibrated, locked, unlocked, unlocked (lock ‘n’ go), unlatched, locking, unlocking, unlatching, motor blocked, undefined.</li>
-    <li>name - name of the device</li>
-    <li>paired - paired information false/true</li>
-    <li>rssi - value of rssi</li>
-    <li>succes - true, false   Returns the status of the last closing command. Ok or not Ok.</li>
-    <li>batteryCritical - Is the battery in a critical state? True, false</li>
-    <li>batteryState - battery status, ok / low</li>
-  </ul>
-  <br><br>
-  <a name="NUKIDeviceset"></a>
-  <b>Set</b>
-  <ul>
-    <li>statusRequest - retrieves the current state of the smartlock from the bridge.</li>
-    <li>lock - lock</li>
-    <li>unlock - unlock</li>
-    <li>unlatch - unlock / open Door</li>
-    <li>unpair -  Removes the pairing with a given Smart Lock</li>
-    <li>locknGo - lock when gone</li>
-    <li>locknGoWithUnlatch - lock after the door has been opened</li>
-    <br>
-  </ul>
-  <br><br>
-  <a name="NUKIDeviceattribut"></a>
-  <b>Attributes</b>
-  <ul>
-    <li>disable - disables the Nuki device</li>
-    <br>
+  <br>Smartlock
+    <ul>
+        <li>batteryCharging - is the battery charging true/false.</li>
+        <li>batteryPercent - current battry state in percent.</li>
+        <li>batteryState - battery state ok/low</li>
+        <li>deviceType - type name of nuki device smartlock/smartlock3/opener</li>
+        <li>firmwareVersion - version of device firmware</li>
+        <li>name - name of the device</li>
+        <li>nukiid - id of the nuki device</li>
+        <li>paired - paired information false/true</li>
+        <li>rssi - value of rssi</li>
+        <li>state - Status of the Smartlock or error message if any error.</li>
+        <li>stateName - Status of the Smartlock or error message if any error.</li>
+        <li>succes - true, false   Returns the status of the last closing command. Ok or not Ok.</li>
+    </ul>
+  <br>Opener
+    <ul>
+        <li>batteryState - battery state ok/low</li>
+        <li>deviceType - type name of nuki device smartlock/smartlock3/opener</li>
+        <li>firmwareVersion - version of device firmware</li>
+        <li>mode - Operation mode (door mode/continuous mode)</li>
+        <li>name - name of the device</li>
+        <li>nukiid - id of the nuki device</li>
+        <li>paired - paired information false/true</li>
+        <li>ringactionState - state of ring (0/1)</li>
+        <li>ringactionTimestamp - timestamp of ring</li>
+        <li>rssi - value of rssi</li>
+        <li>state - Status of the Smartlock or error message if any error.</li>
+        <li>stateName - Status of the Smartlock or error message if any error.</li>
+        <li>succes - true, false   Returns the status of the last closing command. Ok or not Ok.</li>
+    </ul>
+    <br><br>
+    <a name="NUKIDeviceset"></a>
+    <b>Set</b>
+    <ul>
+        <li>statusRequest - retrieves the current state of the smartlock from the bridge.</li>
+        <li>lock - lock</li>
+        <li>unlock - unlock</li>
+        <li>unlatch - unlock / open Door</li>
+        <li>unpair -  Removes the pairing with a given Smart Lock</li>
+        <li>locknGo - lock when gone</li>
+        <li>locknGoWithUnlatch - lock after the door has been opened</li>
+        <br>
+    </ul>
+    <br><br>
+    <a name="NUKIDeviceattribut"></a>
+    <b>Attributes</b>
+    <ul>
+        <li>disable - disables the Nuki device</li>
+        <br>
+    </ul>
   </ul>
 </ul>
 
@@ -212,7 +234,7 @@ sub Initialize {
   ],
   "release_status": "stable",
   "license": "GPL_2",
-  "version": "v2.0.0",
+  "version": "v2.0.1",
   "author": [
     "Marko Oldenburg <leongaultier@gmail.com>"
   ],

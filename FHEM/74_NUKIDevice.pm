@@ -160,7 +160,6 @@ sub Initialize {
         <li>disable - disables the Nuki device</li>
         <br>
     </ul>
-  </ul>
 </ul>
 
 =end html
@@ -251,7 +250,6 @@ sub Initialize {
         <li>disable - disables the Nuki device</li>
         <br>
     </ul>
-  </ul>
 </ul>
 
 =end html_DE

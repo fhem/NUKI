@@ -267,7 +267,7 @@ sub Initialize {
   ],
   "release_status": "stable",
   "license": "GPL_2",
-  "version": "v2.0.1",
+  "version": "v2.0.2",
   "x_apiversion": "1.13.0",
   "author": [
     "Marko Oldenburg <leongaultier@gmail.com>"
@@ -282,7 +282,7 @@ sub Initialize {
     "runtime": {
       "requires": {
         "FHEM": 5.00918799,
-        "perl": 5.016, 
+        "perl": 5.024, 
         "Meta": 0,
         "JSON": 0,
         "Date::Parse": 0

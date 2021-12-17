@@ -77,7 +77,7 @@ sub Initialize {
 <a name="NUKIDevice"></a>
 <h3>NUKIDevice</h3>
 <ul>
-  <u><b>NUKIDevice - Controls Nuki Devices</b></u>
+  <u><b>NUKIDevice - Controls the Nuki Smartlock</b></u>
   <br>
   The Nuki module connects FHEM over the Nuki Bridge with a Nuki Smartlock or Nuki Opener. After that, it´s possible to control your Nuki devices<br>
   Normally the Nuki devices are automatically created by the bridge module.
@@ -112,9 +112,10 @@ sub Initialize {
         <li>paired - paired information false/true</li>
         <li>rssi - value of rssi</li>
         <li>state - Status of the Smartlock or error message if any error.</li>
+        <li>stateName - Status of the Smartlock or error message if any error.</li>
         <li>succes - true, false   Returns the status of the last closing command. Ok or not Ok.</li>
     </ul>
-  <br>Opener
+    <br>Opener
     <ul>
         <li>batteryState - battery state ok/low</li>
         <li>deviceType - type name of nuki device smartlock/smartlock3/opener</li>
@@ -127,11 +128,13 @@ sub Initialize {
         <li>ringactionTimestamp - timestamp of ring</li>
         <li>rssi - value of rssi</li>
         <li>state - Status of the Smartlock or error message if any error.</li>
+        <li>stateName - Status of the Smartlock or error message if any error.</li>
         <li>succes - true, false   Returns the status of the last closing command. Ok or not Ok.</li>
     </ul>
     <br><br>
     <a name="NUKIDeviceset"></a>
     <b>Set</b>
+    <br>Smartlock
     <ul>
         <li>statusRequest - retrieves the current state of the smartlock from the bridge.</li>
         <li>lock - lock</li>
@@ -140,7 +143,15 @@ sub Initialize {
         <li>unpair -  Removes the pairing with a given Smart Lock</li>
         <li>locknGo - lock when gone</li>
         <li>locknGoWithUnlatch - lock after the door has been opened</li>
-        <br>
+    </ul>
+    <br>Opener
+    <ul>
+        <li>statusRequest - retrieves the current state of the smartlock from the bridge.</li>
+        <li>activateRto - activate ring to open mode / ringing the bell activates the electric strike actuation </li>
+        <li>deactivateRto - deactivate ring to open mode</li>
+        <li>electricStrikeActuation - electric strike actuation</li>
+        <li>activateContinuousMode -  activate Nuki Opener Mode with Ring to Open continuously</li>
+        <li>deactivateContinuousMode - deactivate Ring to Open continuously</li>
     </ul>
     <br><br>
     <a name="NUKIDeviceattribut"></a>
@@ -197,31 +208,41 @@ sub Initialize {
     </ul>
   <br>Opener
     <ul>
-        <li>batteryState - battery state ok/low</li>
-        <li>deviceType - type name of nuki device smartlock/smartlock3/opener</li>
-        <li>firmwareVersion - version of device firmware</li>
-        <li>mode - Operation mode (door mode/continuous mode)</li>
-        <li>name - name of the device</li>
-        <li>nukiid - id of the nuki device</li>
-        <li>paired - paired information false/true</li>
-        <li>ringactionState - state of ring (0/1)</li>
-        <li>ringactionTimestamp - timestamp of ring</li>
+        <li>batteryCharging - wird die Batterie geladen true/false.</li>
+        <li>batteryPercent - aktueller Ladestand der Batterie.</li>
+        <li>batteryState - Staus der Batterie ok/low</li>
+        <li>deviceType - der Typenname des Nuki Ger&auml;tes smartlock/smartlock3/opener</li>
+        <li>firmwareVersion - Version der Ger&auml;te Firmware</li>
+        <li>name - Name des Nuki Ger&auml;tes</li>
+        <li>nukiid - die Ger&auml;te Id</li>
+        <li>paired - paired Informationen false/true</li>
+        <li>ringactionState - Status der Klingel. Wurde eben geklingelt (0/1)</li>
+        <li>ringactionTimestamp - Zeitstempel des klingelns</li>
         <li>rssi - Wert f &uuml;r die empfangene Signalst &auml;rke</li>
-        <li>state - Status des Smartlock bzw . Fehlermeldung von Fehler vorhanden.</li>
+        <li>state - Status des Opener bzw . Fehlermeldung von Fehler vorhanden.</li>
         <li>succes - true, false. Gibt den Status des letzen Befehls zur&uuml;ck.</li>
     </ul>
     <br><br>
     <a name="NUKIDeviceset"></a>
     <b>Set</b>
+    <br>Smartlock
     <ul>
-        <li>statusRequest - retrieves the current state of the smartlock from the bridge.</li>
-        <li>lock - lock</li>
-        <li>unlock - unlock</li>
-        <li>unlatch - unlock / open Door</li>
-        <li>unpair -  Removes the pairing with a given Smart Lock</li>
-        <li>locknGo - lock when gone</li>
-        <li>locknGoWithUnlatch - lock after the door has been opened</li>
-        <br>
+        <li>statusRequest - ruft den aktuellen Status des Smartlocks von der Bridge ab.</li>
+        <li>lock - verschlie&szlig;en</li>
+        <li>unlock - aufschlie&szlig;en</li>
+        <li>unlatch - entriegeln/Falle &ouml;ffnen.</li>
+        <li>unpair -  entfernt das pairing mit dem Smart Lock</li>
+        <li>locknGo - verschlie&szlig;en wenn gegangen</li>
+        <li>locknGoWithUnlatch - verschlie&szlig;en nach dem die Falle ge&ouml;ffnet wurde.</li>
+    </ul>
+    <br>Opener
+    <ul>
+        <li>statusRequest - ruft den aktuellen Status des Opener von der Bridge ab.</li>
+        <li>activateRto - aktiviert den ring to open Modus / ein klingeln aktiviert den T&uuml;r&ouml;ffner</li>
+        <li>deactivateRto - deaktiviert den ring to open Modus</li>
+        <li>electricStrikeActuation - aktiviert den T&uuml;r&ouml;ffner</li>
+        <li>activateContinuousMode -  aktiviert dauerhaft &ouml;ffnen der T&uuml;r durch klingeln Modus</li>
+        <li>deactivateContinuousMode - deaktiviert diesen Modus</li>
     </ul>
     <br><br>
     <a name="NUKIDeviceattribut"></a>
@@ -252,7 +273,7 @@ sub Initialize {
   ],
   "release_status": "stable",
   "license": "GPL_2",
-  "version": "v2.0.1",
+  "version": "v2.0.2",
   "author": [
     "Marko Oldenburg <leongaultier@gmail.com>"
   ],
@@ -266,7 +287,7 @@ sub Initialize {
     "runtime": {
       "requires": {
         "FHEM": 5.00918799,
-        "perl": 5.016, 
+        "perl": 5.024, 
         "Meta": 0,
         "JSON": 0,
         "Date::Parse": 0

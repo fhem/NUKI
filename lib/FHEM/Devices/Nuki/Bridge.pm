@@ -1,6 +1,6 @@
 ###############################################################################
 #
-# Developed with VSCodium
+# Developed with VSCodium and richterger perl plugin
 #
 #  (c) 2016-2021 Copyright: Marko Oldenburg (fhemdevelopment at cooltux dot net)
 #  All rights reserved

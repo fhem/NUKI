@@ -1,6 +1,6 @@
 ###############################################################################
 #
-# Developed with VSCodium
+# Developed with VSCodium and richterger perl plugin
 #
 #  (c) 2016-2021 Copyright: Marko Oldenburg (fhemdevelopment at cooltux dot net)
 #  All rights reserved
@@ -93,13 +93,27 @@ sub Initialize {
 <a name="NUKIBridge"></a>
 <h3>NUKIBridge</h3>
 <ul>
-  <u><b>NUKIBridge - controls the Nuki Smartlock over the Nuki Bridge</b></u>
+  <u><b>NUKIBridge - controls Nuki Devices (Smartlock, Opener and so on) over the Nuki Bridge</b></u>
   <br>
-  The Nuki Bridge module connects FHEM to the Nuki Bridge and then reads all the smartlocks available on the bridge. Furthermore, the detected Smartlocks are automatically created as independent devices.
+  The Nuki Bridge module connects FHEM to the Nuki Bridge and then reads all the Nuki devices available on the bridge. Furthermore, the detected Nuki smart devices are automatically created as independent devices.
   <br><br>
   <a name="NUKIBridgedefine"></a>
-  <b>Define</b>
-  <ul><br>
+  <b>Define</b><br>
+  There a two ways to define the bridge for use in fhem.<br>
+  <b>first:</b>
+  <ul>
+    <code>define &lt;name&gt; NUKIBridge</code>
+    <br><br>
+    Example:
+    <ul><br>
+      <code>define NBridge1 NUKIBridge</code><br>
+    </ul>
+    <br>
+    This statement creates a NUKIBridge device and activated the Bridge discovery and API activation. Once a bridge has been discovered on the LAN the API done be activated and the API token retrieved. You has to confirm this request by pressing the button on the bridge.<br>
+    After the bridge device is setting up, all available Smartlocks are automatically placed in FHEM.
+  </ul><br>
+  <b>second:</b>
+  <ul>
     <code>define &lt;name&gt; NUKIBridge &lt;HOST&gt; &lt;API-TOKEN&gt;</code>
     <br><br>
     Example:
@@ -114,16 +128,18 @@ sub Initialize {
   <a name="NUKIBridgereadings"></a>
   <b>Readings</b>
   <ul>
-    <li>bridgeAPI - API Version of bridge</li>
     <li>bridgeType - Hardware bridge / Software bridge</li>
-    <li>currentTime - Current timestamp</li>
+    <li>configAuthSuccess - state of command activat/deactiviate bridge discovery</li>
+    <li>currentGMTime - Current timestamp</li>
     <li>firmwareVersion - Version of the bridge firmware</li>
     <li>hardwareId - Hardware ID</li>
     <li>lastError - Last connected error</li>
     <li>serverConnected - Flag indicating whether or not the bridge is connected to the Nuki server</li>
     <li>serverId - Server ID</li>
+    <li>state - state of the bridge device, mostly online</li>
     <li>uptime - Uptime of the bridge in seconds</li>
     <li>wifiFirmwareVersion- Version of the WiFi modules firmware</li>
+    <li>wlanConnected - wifi connect?</li>
     <br>
     The preceding number is continuous, starts with 0 und returns the properties of <b>one</b> Smartlock.
    </ul>
@@ -186,16 +202,18 @@ sub Initialize {
   <a name="NUKIBridgereadings"></a>
   <b>Readings</b>
   <ul>
-    <li>bridgeAPI - API Version der Bridge</li>
     <li>bridgeType - Hardware oder Software/App Bridge</li>
-    <li>currentTime - aktuelle Zeit auf der Bridge zum zeitpunkt des Info holens</li>
+    <li>configAuthSuccess - status des Kommandos zum aktivieren/deaktivieren des bridge discovery</li>
+    <li>currentGMTime - aktuelle Zeit auf der Bridge zum zeitpunkt des Info holens</li>
     <li>firmwareVersion - aktuell auf der Bridge verwendete Firmwareversion</li>
     <li>hardwareId - ID der Hardware Bridge</li>
     <li>lastError - gibt die letzte HTTP Errormeldung wieder</li>
     <li>serverConnected - true/false gibt an ob die Hardwarebridge Verbindung zur Nuki-Cloude hat.</li>
     <li>serverId - gibt die ID des Cloudeservers wieder</li>
+    <li>state - status der bridge zu fhem, zu meist online :-)</li>
     <li>uptime - Uptime der Bridge in Sekunden</li>
     <li>wifiFirmwareVersion- Firmwareversion des Wifi Modules der Bridge</li>
+    <li>wlanConnected - Wlan verbunden?</li>
     <br>
     Die vorangestellte Zahl ist forlaufend und gibt beginnend bei 0 die Eigenschaften <b>Eines</b> Smartlocks wieder.
   </ul>
@@ -249,8 +267,8 @@ sub Initialize {
   ],
   "release_status": "stable",
   "license": "GPL_2",
-  "version": "v2.0.0",
-  "x_apiversion": "1.12.3",
+  "version": "v2.0.2",
+  "x_apiversion": "1.13.0",
   "author": [
     "Marko Oldenburg <leongaultier@gmail.com>"
   ],
@@ -264,7 +282,7 @@ sub Initialize {
     "runtime": {
       "requires": {
         "FHEM": 5.00918799,
-        "perl": 5.016, 
+        "perl": 5.024, 
         "Meta": 0,
         "JSON": 0,
         "Date::Parse": 0
